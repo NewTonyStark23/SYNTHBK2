@@ -36,7 +36,6 @@ import { SituationMonitor } from './situation-monitor';
 import { OsirisAI } from './osiris-ai';
 import { Floorplan } from './floorplan';
 import { PakePackager } from './pake-packager';
-import { WebLLMEngine } from './web-llm';
 import { logger } from './logger';
 
 export interface SynthConfig {
@@ -97,7 +96,6 @@ export class SynthSAI {
   private osirisAI: OsirisAI;
   private floorplan: Floorplan;
   private pakePackager: PakePackager;
-  private webLLM: WebLLMEngine;
 
   private config: SynthConfig;
 
@@ -160,13 +158,8 @@ export class SynthSAI {
       width: 1400,
       height: 900
     });
-    this.webLLM = new WebLLMEngine({
-      modelId: 'Phi-3-mini-4k-instruct-q4f16_1-MLC',
-      temperature: 0.7,
-      maxTokens: 2048
-    });
 
-    console.log('[SynthSAI] All 34 modules initialized (27 original + 6 new tool integrations + WebLLM)');
+    console.log('[SynthSAI] All 33 modules initialized (27 original + 6 new tool integrations)');
     console.log('[SynthSAI] Configuration:', this.config);
   }
 
@@ -185,35 +178,10 @@ export class SynthSAI {
       // Step 1: Performance profiling
       const profiledProcess = await this.performanceOptimizer.profile('main_process', async () => {
         
-        // Step 1a: Semantic Analysis (6-layer deep understanding with LLM)
-        logger.debug('SynthSAI', 'Step 1a: Deep Semantic Analysis');
+        // Step 1a: Semantic Analysis (6-layer deep understanding)
+        logger.debug('SynthSAI', 'Step 1a: Semantic Analysis');
         const semanticAnalysis = this.semanticAnalyzer.analyze(input);
-        
-        // Enhance with LLM analysis for nuance understanding
-        let llmInsights: any = {};
-        try {
-          const llmNuance = await this.analyzeWithLLM(input, 'nuance');
-          const llmIntent = await this.analyzeWithLLM(input, 'intent');
-          
-          // Store LLM insights
-          if (llmNuance && !llmNuance.error) {
-            llmInsights.nuance = llmNuance;
-          }
-          if (llmIntent && !llmIntent.error) {
-            llmInsights.intent = llmIntent;
-            // Use LLM intent if more confident
-            if (llmIntent.confidence > semanticAnalysis.synthesized.confidence) {
-              semanticAnalysis.synthesized.intent = llmIntent.primaryIntent || semanticAnalysis.synthesized.intent;
-            }
-          }
-          
-          modulesUsed.push('WebLLM', 'MultiLayerSemanticAnalyzer');
-          logger.success('WebLLM', 'LLM semantic analysis complete');
-        } catch (error) {
-          logger.warning('SynthSAI', 'LLM semantic analysis failed, using pattern-based');
-          modulesUsed.push('MultiLayerSemanticAnalyzer');
-        }
-        
+        modulesUsed.push('MultiLayerSemanticAnalyzer');
         logger.success('MultiLayerSemanticAnalyzer', 'Analysis complete', {
           intent: semanticAnalysis.synthesized.intent,
           emotion: semanticAnalysis.synthesized.emotion,
@@ -313,23 +281,13 @@ export class SynthSAI {
         // Step 3: Chain-of-Thought Reasoning (for complex problems)
         let reasoningResult: any = null;
         if (this.needsComplexReasoning(input, intent)) {
-          logger.debug('SynthSAI', 'Step 3: Deep Reasoning with LLM');
-          try {
-            // Use LLM for deep reasoning
-            reasoningResult = await this.generateLLMReasoning(input);
-            modulesUsed.push('WebLLM', 'ChainOfThoughtReasoner');
-            logger.info('WebLLM', 'LLM reasoning complete', {
-              confidence: reasoningResult.confidence
-            });
-          } catch (error) {
-            logger.warning('SynthSAI', 'LLM reasoning failed, using pattern-based reasoning');
-            reasoningResult = await this.chainOfThoughtReasoner.reason(input);
-            modulesUsed.push('ChainOfThoughtReasoner');
-            logger.info('ChainOfThoughtReasoner', 'Pattern-based reasoning complete', {
-              steps: reasoningResult.steps.length,
-              confidence: reasoningResult.confidence
-            });
-          }
+          logger.debug('SynthSAI', 'Step 3: Chain-of-Thought Reasoning');
+          reasoningResult = await this.chainOfThoughtReasoner.reason(input);
+          modulesUsed.push('ChainOfThoughtReasoner');
+          logger.info('ChainOfThoughtReasoner', 'Reasoning complete', {
+            steps: reasoningResult.steps.length,
+            confidence: reasoningResult.confidence
+          });
         }
 
         // Step 4: Instruction Decomposition (if complex)
@@ -351,26 +309,14 @@ export class SynthSAI {
 
         // Check if this is a conversational intent (greeting, farewell, small talk, etc.)
         if (this.isConversationalIntent(intent, input)) {
-          logger.info('SynthSAI', 'Generating conversational response with LLM');
-          try {
-            output = await this.generateLLMResponse(input, {
-              intent,
-              emotion: emotionalState.primaryEmotion,
-              entities: entities.map(e => e.name),
-              knowledge: knowledgeAnswer.answer,
-              conversationHistory: []
-            });
-            modulesUsed.push('WebLLM', 'ConversationalResponder');
-          } catch (error) {
-            logger.warning('SynthSAI', 'LLM failed, falling back to pattern-based response');
-            output = await this.conversationalResponder.generateResponse(input, {
-              intent,
-              emotion: emotionalState.primaryEmotion,
-              entities: entities.map(e => e.name),
-              conversationHistory: []
-            });
-            modulesUsed.push('ConversationalResponder');
-          }
+          logger.info('SynthSAI', 'Generating conversational response');
+          output = await this.conversationalResponder.generateResponse(input, {
+            intent,
+            emotion: emotionalState.primaryEmotion,
+            entities: entities.map(e => e.name),
+            conversationHistory: []
+          });
+          modulesUsed.push('ConversationalResponder');
         }
         // Check if real-time news/markets requested
         else if (this.needsRealTimeInfo(input)) {
@@ -503,62 +449,30 @@ export class SynthSAI {
         }
         // Check if code generation is needed
         else if (this.needsCodeGeneration(input, intent)) {
-          logger.info('SynthSAI', 'Generating code with LLM assistance');
-          try {
-            // Use LLM to generate code
-            const codePrompt = `Generate code for: ${input}\n\nProvide the code in a code block with language specification.`;
-            const llmCode = await this.generateLLMResponse(codePrompt, {
-              intent: 'creation',
-              emotion: 'neutral',
-              entities: [],
-              knowledge: knowledgeAnswer.answer
-            });
-            
-            // Extract code from LLM response
-            const codeMatch = llmCode.match(/```(\w+)?\n([\s\S]*?)```/);
-            if (codeMatch) {
-              const language = codeMatch[1] || 'javascript';
-              const code = codeMatch[2];
-              output = '```' + language + '\n' + code + '\n```\n\n' + llmCode.replace(/```\w*\n[\s\S]*?```/, '').trim();
-              modulesUsed.push('WebLLM', 'EnhancedCodeGenerator');
-              
-              // Execute code if possible
-              if (language === 'javascript' || language === 'html') {
-                try {
-                  const execResult = await this.codeExecutor.executeAndRender(code);
-                  if (execResult.success && execResult.html) {
-                    output += '\n\n' + this.codeExecutor.generatePreview(execResult.html);
-                    modulesUsed.push('CodeExecutor');
-                  }
-                } catch (error) {
-                  logger.warning('CodeExecutor', 'Execution failed', { error });
-                }
+          logger.info('SynthSAI', 'Generating real code');
+          const codeResult = await this.enhancedCodeGenerator.generateCode(input);
+          output = '```' + codeResult.language + '\n' + codeResult.code + '\n```\n\n' + codeResult.explanation;
+          modulesUsed.push('EnhancedCodeGenerator');
+          
+          // Execute code if possible
+          if (codeResult.language === 'javascript' || codeResult.language === 'html') {
+            try {
+              const execResult = await this.codeExecutor.executeAndRender(codeResult.code);
+              if (execResult.success && execResult.html) {
+                output += '\n\n' + this.codeExecutor.generatePreview(execResult.html);
+                modulesUsed.push('CodeExecutor');
               }
-            } else {
-              // Fallback to template-based generation
-              const codeResult = await this.enhancedCodeGenerator.generateCode(input);
-              output = '```' + codeResult.language + '\n' + codeResult.code + '\n```\n\n' + codeResult.explanation;
-              modulesUsed.push('EnhancedCodeGenerator');
+            } catch (error) {
+              logger.warning('CodeExecutor', 'Execution failed', { error });
             }
-          } catch (error) {
-            logger.warning('SynthSAI', 'LLM code generation failed, using template');
-            const codeResult = await this.enhancedCodeGenerator.generateCode(input);
-            output = '```' + codeResult.language + '\n' + codeResult.code + '\n```\n\n' + codeResult.explanation;
-            modulesUsed.push('EnhancedCodeGenerator');
           }
         }
         // Check if creative writing is needed
         else if (this.needsCreativeWriting(input)) {
-          logger.info('SynthSAI', 'Generating creative content with LLM');
-          try {
-            output = await this.generateLLMCreative(input, 'creative');
-            modulesUsed.push('WebLLM', 'CreativeWritingEngine');
-          } catch (error) {
-            logger.warning('SynthSAI', 'LLM creative generation failed, using template');
-            const creativeResult = await this.creativeWritingEngine.generateCreative(input, 'literary', 'short_story');
-            output = creativeResult.content;
-            modulesUsed.push('CreativeWritingEngine');
-          }
+          logger.info('SynthSAI', 'Generating creative content');
+          const creativeResult = await this.creativeWritingEngine.generateCreative(input, 'literary', 'short_story');
+          output = creativeResult.content;
+          modulesUsed.push('CreativeWritingEngine');
         }
         // Check if UI generation is needed
         else if (this.needsUIGeneration(input, intent)) {
@@ -604,30 +518,10 @@ export class SynthSAI {
             });
           }
         }
-        // Standard response with LLM intelligence
+        // Standard response with real knowledge
         else {
-          logger.info('SynthSAI', 'Generating intelligent response with LLM');
-          try {
-            output = await this.generateLLMResponse(input, {
-              intent,
-              emotion: emotionalState.primaryEmotion,
-              entities: entities.map(e => e.name),
-              knowledge: knowledgeAnswer.answer,
-              conversationHistory: []
-            });
-            modulesUsed.push('WebLLM');
-            
-            // Add sources if from web search
-            if (webSearchResult && webSearchResult.results && webSearchResult.results.length > 0) {
-              output += '\n\n**Sources:**\n';
-              webSearchResult.results.slice(0, 3).forEach((result: any, i: number) => {
-                output += `${i + 1}. [${result.title}](${result.url})\n`;
-              });
-            }
-          } catch (error) {
-            logger.warning('SynthSAI', 'LLM generation failed, using pattern-based response');
-            output = this.generateEnhancedResponse(input, knowledgeAnswer, semanticAnalysis, webSearchResult);
-          }
+          output = this.generateEnhancedResponse(input, knowledgeAnswer, semanticAnalysis, webSearchResult);
+          logger.info('SynthSAI', 'Enhanced response generated');
         }
 
         // Step 6: Uncertainty Calibration
@@ -925,95 +819,6 @@ export class SynthSAI {
            lower.includes('distribute');
   }
 
-  private async generateLLMResponse(
-    input: string,
-    context: {
-      intent: string;
-      emotion: string;
-      entities: string[];
-      knowledge?: string;
-      conversationHistory?: string[];
-    }
-  ): Promise<string> {
-    try {
-      // Build a comprehensive prompt with context
-      const systemPrompt = `You are Synth SAI, an advanced AI assistant with 34 specialized modules. You are:
-- Fast and efficient (local execution)
-- Privacy-focused (all processing happens locally)
-- Transparent (you show your reasoning)
-- Helpful and accurate
-
-Current context:
-- User intent: ${context.intent}
-- Emotional state: ${context.emotion}
-- Key entities: ${context.entities.join(', ') || 'none'}
-${context.knowledge ? `- Relevant knowledge: ${context.knowledge}` : ''}
-
-Respond naturally and helpfully. Be concise but thorough.`;
-
-      const messages = [];
-      
-      // Add conversation history if available
-      if (context.conversationHistory && context.conversationHistory.length > 0) {
-        context.conversationHistory.forEach(msg => {
-          messages.push(msg);
-        });
-      }
-      
-      // Add current input
-      messages.push({
-        role: 'user' as const,
-        content: input
-      });
-
-      const response = await this.webLLM.chat(messages, {
-        temperature: context.emotion === 'frustrated' ? 0.5 : 0.7,
-        maxTokens: 1024
-      });
-
-      return response;
-    } catch (error) {
-      console.error('[SynthSAI] LLM generation failed:', error);
-      // Fallback to pattern-based response
-      return this.generateStandardResponse(input, { confidence: 0.5, answer: '' }, { synthesized: { intent: context.intent, emotion: context.emotion } });
-    }
-  }
-
-  private async generateLLMReasoning(input: string): Promise<{
-    answer: string;
-    reasoning: string;
-    confidence: number;
-  }> {
-    try {
-      return await this.webLLM.reason(input);
-    } catch (error) {
-      console.error('[SynthSAI] LLM reasoning failed:', error);
-      return {
-        answer: 'Unable to reason through this problem.',
-        reasoning: 'LLM reasoning unavailable',
-        confidence: 0.1
-      };
-    }
-  }
-
-  private async generateLLMCreative(task: string, style: string): Promise<string> {
-    try {
-      return await this.webLLM.create(task, style);
-    } catch (error) {
-      console.error('[SynthSAI] LLM creative generation failed:', error);
-      return 'Unable to generate creative content at this time.';
-    }
-  }
-
-  private async analyzeWithLLM(text: string, type: 'sentiment' | 'entities' | 'intent' | 'nuance' | 'summary'): Promise<any> {
-    try {
-      return await this.webLLM.analyze(text, type);
-    } catch (error) {
-      console.error('[SynthSAI] LLM analysis failed:', error);
-      return { error: 'Analysis unavailable' };
-    }
-  }
-
   private generateEnhancedResponse(
     input: string,
     knowledgeAnswer: any,
@@ -1137,8 +942,6 @@ Respond naturally and helpfully. Be concise but thorough.`;
       osirisAI: this.osirisAI.getStats(),
       floorplan: this.floorplan.getStats(),
       pakePackager: this.pakePackager.getStats(),
-      // Core intelligence
-      webLLM: this.webLLM.getStats(),
     };
   }
 
