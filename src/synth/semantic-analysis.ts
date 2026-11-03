@@ -165,7 +165,9 @@ export class MultiLayerSemanticAnalyzer {
     // Check small talk
     else if (lower.includes('how are you') || lower.includes('how\'s it going') || 
              lower.includes('how you doing') || lower.includes('what\'s new') || 
-             lower.includes('whats new') || lower.includes('how\'s your day')) {
+             lower.includes('whats new') || lower.includes('how\'s your day') ||
+             lower.includes('what\'s up') || lower.includes('whats up') ||
+             lower.includes('sup') || lower.includes('hey there')) {
       intent = 'smalltalk';
       confidence = 0.9;
     }

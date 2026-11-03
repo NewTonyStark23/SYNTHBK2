@@ -246,63 +246,70 @@ export class SynthSAI {
         modulesUsed.push(`SAIModelManager:${selectedModel}`);
         logger.info('SAIModelManager', 'Model selected', { model: selectedModel });
 
-        // Step 2: Knowledge Retrieval (REAL knowledge from Wikipedia + web search)
+        // CRITICAL FIX: Check if this is conversational FIRST, before knowledge retrieval
+        const isConversational = this.isConversationalIntent(intent, input);
+        
+        // Step 2: Knowledge Retrieval (ONLY if NOT conversational)
         logger.debug('SynthSAI', 'Step 2: Real Knowledge Retrieval');
-        let knowledgeAnswer: any;
+        let knowledgeAnswer: any = { confidence: 0, answer: '' };
         let webSearchResult: any = null;
         
-        // Try local knowledge graph first
-        const localAnswer = this.knowledgeGraph.query(input);
-        
-        // If low confidence, use real knowledge base
-        if (localAnswer.confidence < 0.7) {
-          logger.info('SynthSAI', 'Using real knowledge base (Wikipedia)');
-          knowledgeAnswer = await this.realKnowledgeBase.answerQuestion(input);
-          modulesUsed.push('RealKnowledgeBase');
+        if (!isConversational) {
+          // Try local knowledge graph first
+          const localAnswer = this.knowledgeGraph.query(input);
           
-          // If still low confidence, try Vane AI search
-          if (knowledgeAnswer.confidence < 0.6) {
-            logger.info('SynthSAI', 'Using Vane AI search');
-            try {
-              const vaneResult = await this.vaneSearch.search(input, { mode: 'balanced' });
-              modulesUsed.push('VaneSearch');
-              
-              if (vaneResult.answer && vaneResult.confidence > 0.5) {
-                knowledgeAnswer = {
-                  answer: vaneResult.answer,
-                  confidence: vaneResult.confidence,
-                  sources: vaneResult.sources.slice(0, 3).map(s => ({
-                    title: s.title,
-                    url: s.url
-                  }))
-                };
-              }
-            } catch (error) {
-              logger.warning('VaneSearch', 'Failed, falling back to basic web search');
-              webSearchResult = await this.webSearch.search(input);
-              modulesUsed.push('WebSearch');
-              
-              if (webSearchResult.instantAnswer) {
-                knowledgeAnswer = {
-                  answer: webSearchResult.instantAnswer,
-                  confidence: 0.7,
-                  sources: webSearchResult.results.slice(0, 3).map((r: any) => ({
-                    title: r.title,
-                    url: r.url
-                  }))
-                };
+          // If low confidence, use real knowledge base
+          if (localAnswer.confidence < 0.7) {
+            logger.info('SynthSAI', 'Using real knowledge base (Wikipedia)');
+            knowledgeAnswer = await this.realKnowledgeBase.answerQuestion(input);
+            modulesUsed.push('RealKnowledgeBase');
+            
+            // If still low confidence, try Vane AI search
+            if (knowledgeAnswer.confidence < 0.6) {
+              logger.info('SynthSAI', 'Using Vane AI search');
+              try {
+                const vaneResult = await this.vaneSearch.search(input, { mode: 'balanced' });
+                modulesUsed.push('VaneSearch');
+                
+                if (vaneResult.answer && vaneResult.confidence > 0.5) {
+                  knowledgeAnswer = {
+                    answer: vaneResult.answer,
+                    confidence: vaneResult.confidence,
+                    sources: vaneResult.sources.slice(0, 3).map(s => ({
+                      title: s.title,
+                      url: s.url
+                    }))
+                  };
+                }
+              } catch (error) {
+                logger.warning('VaneSearch', 'Failed, falling back to basic web search');
+                webSearchResult = await this.webSearch.search(input);
+                modulesUsed.push('WebSearch');
+                
+                if (webSearchResult.instantAnswer) {
+                  knowledgeAnswer = {
+                    answer: webSearchResult.instantAnswer,
+                    confidence: 0.7,
+                    sources: webSearchResult.results.slice(0, 3).map((r: any) => ({
+                      title: r.title,
+                      url: r.url
+                    }))
+                  };
+                }
               }
             }
+          } else {
+            knowledgeAnswer = localAnswer;
+            modulesUsed.push('KnowledgeGraph');
           }
+          
+          logger.info('KnowledgeRetrieval', 'Query complete', {
+            confidence: knowledgeAnswer.confidence,
+            sources: knowledgeAnswer.sources?.length || 0
+          });
         } else {
-          knowledgeAnswer = localAnswer;
-          modulesUsed.push('KnowledgeGraph');
+          logger.info('SynthSAI', 'Conversational intent detected - skipping knowledge retrieval');
         }
-        
-        logger.info('KnowledgeRetrieval', 'Query complete', {
-          confidence: knowledgeAnswer.confidence,
-          sources: knowledgeAnswer.sources?.length || 0
-        });
 
         // Step 3: Chain-of-Thought Reasoning (for complex problems)
         let reasoningResult: any = null;
@@ -328,30 +335,32 @@ export class SynthSAI {
           });
         }
 
-        // Step 5: Generate Response (using LLM for intelligence)
+        // Step 5: Generate Response (using REAL generation)
         logger.debug('SynthSAI', 'Step 5: Response Generation');
         let output = '';
         let uiSpec = null;
 
         // Check if this is a conversational intent (greeting, farewell, small talk, etc.)
-        if (this.isConversationalIntent(intent, input)) {
-          logger.info('SynthSAI', 'Generating conversational response with Synthetic Brain');
+        if (isConversational) {
+          logger.info('SynthSAI', 'Generating conversational response');
           
-          // Use brain output if confidence is high enough
-          if (brainOutput.confidence > 0.6) {
-            output = brainOutput.response;
-            logger.info('SyntheticBrain', 'Using brain response', { confidence: brainOutput.confidence });
-          } else {
-            // Fallback to conversational responder
-            output = await this.conversationalResponder.generateResponse(input, {
-              intent,
-              emotion: emotionalState.primaryEmotion,
-              entities: entities.map(e => e.name),
-              conversationHistory: []
-            });
-            logger.info('ConversationalResponder', 'Using fallback response');
+          // For conversational intents, ALWAYS use conversational responder
+          // Synthetic brain is still learning, so don't rely on it for conversations yet
+          output = await this.conversationalResponder.generateResponse(input, {
+            intent,
+            emotion: emotionalState.primaryEmotion,
+            entities: entities.map(e => e.name),
+            conversationHistory: []
+          });
+          
+          // Enhance with brain insights if available
+          if (brainOutput.confidence > 0.5 && brainOutput.response.length > 10) {
+            logger.info('SyntheticBrain', 'Brain insights available', { confidence: brainOutput.confidence });
+            // Could blend brain response here in future
           }
-          modulesUsed.push('ConversationalResponder', 'SyntheticBrain');
+          
+          modulesUsed.push('ConversationalResponder');
+          logger.info('ConversationalResponder', 'Conversational response generated');
         }
         // Check if real-time news/markets requested
         else if (this.needsRealTimeInfo(input)) {
@@ -704,7 +713,7 @@ export class SynthSAI {
     const lower = input.toLowerCase().trim();
     
     // Check intent
-    if (intent === 'greeting' || intent === 'farewell' || intent === 'thanks') {
+    if (intent === 'greeting' || intent === 'farewell' || intent === 'thanks' || intent === 'smalltalk') {
       return true;
     }
     

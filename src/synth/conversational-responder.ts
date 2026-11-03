@@ -77,7 +77,8 @@ export class ConversationalResponder {
     const smallTalk = [
       'how are you', 'how\'s it going', 'how you doing', 'what\'s new',
       'whats new', 'how\'s your day', 'how was your day', 'nice weather',
-      'how\'s everything', 'what\'s going on', 'whats going on'
+      'how\'s everything', 'what\'s going on', 'whats going on',
+      'what\'s up', 'whats up', 'sup', 'hey there'
     ];
     
     return smallTalk.some(s => input.includes(s));
