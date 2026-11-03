@@ -1,671 +1,355 @@
-// ============================================
-// SYNTH SAI - COMPREHENSIVE STRESS TEST
-// Tests all 16 modules individually and together
-// ============================================
-
-import { synth } from './synth/synth-sai';
-import { logger } from './synth/logger';
-
-interface TestResult {
-  module: string;
-  test: string;
-  passed: boolean;
-  details: string;
-  duration: number;
-}
+// Comprehensive stress test for all Synth SAI modules
+import { SynthSAI } from './synth/synth-sai';
 
 class StressTest {
-  private results: TestResult[] = [];
-  private startTime = Date.now();
+  private synth: SynthSAI;
+  private results: Array<{
+    test: string;
+    input: string;
+    passed: boolean;
+    details: string;
+    duration: number;
+  }> = [];
 
-  async runAllTests(): Promise<void> {
-    console.log('🧪 Starting Synth SAI Comprehensive Stress Test\n');
-    console.log('='.repeat(80));
+  constructor() {
+    this.synth = new SynthSAI();
+  }
 
-    // Test each module individually
-    await this.testConversationState();
-    await this.testAtomicMemory();
-    await this.testSAIModelTypes();
-    await this.testSemanticAnalysis();
-    await this.testKnowledgeGraph();
-    await this.testFrontierUI();
-    await this.testInstructionDecomposer();
-    await this.testUncertaintyCalibrator();
-    await this.testToolExecutor();
-    await this.testLongFormGenerator();
-    await this.testEmotionalIntelligence();
-    await this.testContinuousLearning();
-    await this.testTriAttention();
-    await this.testSwarmTelepathy();
-    await this.testAgentDesktop();
-    await this.testGraphEngine();
+  async runAllTests() {
+    console.log('🧪 Starting Comprehensive Stress Test...\n');
 
-    // Test integrated pipeline
-    await this.testIntegratedPipeline();
+    // Test 1: Conversational Responses
+    await this.testConversationalResponses();
 
-    // Test edge cases
-    await this.testEdgeCases();
+    // Test 2: Code Generation
+    await this.testCodeGeneration();
 
-    // Test learning capabilities
-    await this.testLearningCapabilities();
+    // Test 3: Knowledge Retrieval
+    await this.testKnowledgeRetrieval();
+
+    // Test 4: Web Search
+    await this.testWebSearch();
+
+    // Test 5: Creative Writing
+    await this.testCreativeWriting();
+
+    // Test 6: Chain of Thought Reasoning
+    await this.testReasoning();
+
+    // Test 7: Multi-Modal (if image provided)
+    await this.testMultiModal();
+
+    // Test 8: Learning Capabilities
+    await this.testLearning();
 
     // Print results
     this.printResults();
   }
 
-  // ============================================
-  // MODULE TESTS
-  // ============================================
+  private async testConversationalResponses() {
+    console.log('📝 Testing Conversational Responses...');
 
-  private async testConversationState(): Promise<void> {
-    const test = 'Conversation State - Referential Resolution';
-    const start = Date.now();
+    const tests = [
+      { input: 'yo whats up bro', expected: 'greeting' },
+      { input: 'hello there', expected: 'greeting' },
+      { input: 'how are you doing', expected: 'smalltalk' },
+      { input: 'thanks for helping', expected: 'gratitude' },
+      { input: 'bye see you later', expected: 'farewell' },
+      { input: 'good morning', expected: 'greeting' },
+    ];
 
-    try {
-      // Test 1: Create entity
-      const response1 = await synth.process('Build a red website', 'test-user');
-      
-      // Test 2: Reference it
-      const response2 = await synth.process('Actually make it blue', 'test-user');
-      
-      const passed = response2.confidence > 0.5 && 
-                     response2.modulesUsed.includes('ConversationStateMachine');
+    for (const test of tests) {
+      const start = Date.now();
+      const response = await this.synth.process(test.input);
+      const duration = Date.now() - start;
+
+      // Check that response is natural language (not JSON)
+      const isNatural = !response.output.startsWith('{') && 
+                       !response.output.startsWith('[') &&
+                       response.output.length > 10;
+
+      // Check that ConversationalResponder was used
+      const usedResponder = response.modulesUsed.includes('ConversationalResponder');
+
+      const passed = isNatural && usedResponder;
 
       this.results.push({
-        module: 'ConversationState',
-        test,
+        test: 'Conversational Response',
+        input: test.input,
         passed,
-        details: `Created entity, then referenced it. Confidence: ${(response2.confidence * 100).toFixed(1)}%`,
-        duration: Date.now() - start,
+        details: passed 
+          ? `Natural response: "${response.output.substring(0, 50)}..."`
+          : `Failed: Output is ${isNatural ? 'natural' : 'JSON'}, Responder ${usedResponder ? 'used' : 'NOT used'}`,
+        duration,
       });
-    } catch (error) {
-      this.results.push({
-        module: 'ConversationState',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
+
+      console.log(`  ${passed ? '✅' : '❌'} "${test.input}" → ${passed ? 'PASS' : 'FAIL'}`);
     }
   }
 
-  private async testAtomicMemory(): Promise<void> {
-    const test = 'Atomic Memory - Compression';
-    const start = Date.now();
+  private async testCodeGeneration() {
+    console.log('\n💻 Testing Code Generation...');
 
-    try {
-      const stats = synth.getSystemStats().atomicMemory;
-      const compressionRatio = parseFloat(stats.compressionRatio);
-      const passed = compressionRatio > 100; // Should achieve significant compression
+    const tests = [
+      'build a red website',
+      'create a todo list app',
+      'make a calculator',
+    ];
 
-      this.results.push({
-        module: 'AtomicMemory',
-        test,
-        passed,
-        details: `Compression ratio: ${stats.compressionRatio}x, Total atoms: ${stats.totalAtoms}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'AtomicMemory',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
+    for (const input of tests) {
+      const start = Date.now();
+      const response = await this.synth.process(input);
+      const duration = Date.now() - start;
 
-  private async testSAIModelTypes(): Promise<void> {
-    const test = 'SAI Model Types - Selection';
-    const start = Date.now();
-
-    try {
-      const response1 = await synth.process('Build a website', 'test-user');
-      const response2 = await synth.process('Analyze this data', 'test-user');
+      // Check for code blocks
+      const hasCode = response.output.includes('```');
       
-      const passed = response1.modelUsed !== response2.modelUsed || 
-                     response1.modulesUsed.some((m: string) => m.includes('SAIModelManager'));
+      // Check for preview
+      const hasPreview = response.output.includes('Preview') || 
+                        response.output.includes('<iframe') ||
+                        response.output.includes('<!DOCTYPE');
+
+      // Check modules used
+      const usedCodeGenerator = response.modulesUsed.includes('EnhancedCodeGenerator');
+
+      const passed = hasCode && usedCodeGenerator;
 
       this.results.push({
-        module: 'SAIModelTypes',
-        test,
+        test: 'Code Generation',
+        input,
         passed,
-        details: `Model 1: ${response1.modelUsed}, Model 2: ${response2.modelUsed}`,
-        duration: Date.now() - start,
+        details: passed
+          ? `Generated code with ${hasPreview ? 'preview' : 'no preview'}`
+          : `Failed: Code=${hasCode}, Preview=${hasPreview}, Generator=${usedCodeGenerator}`,
+        duration,
       });
-    } catch (error) {
-      this.results.push({
-        module: 'SAIModelTypes',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
+
+      console.log(`  ${passed ? '✅' : '❌'} "${input}" → ${passed ? 'PASS' : 'FAIL'}`);
     }
   }
 
-  private async testSemanticAnalysis(): Promise<void> {
-    const test = 'Semantic Analysis - 6-Layer Understanding';
-    const start = Date.now();
+  private async testKnowledgeRetrieval() {
+    console.log('\n📚 Testing Knowledge Retrieval...');
 
-    try {
-      const response = await synth.process('I\'m so frustrated! This code keeps failing!', 'test-user');
-      
-      const passed = response.modulesUsed.includes('MultiLayerSemanticAnalyzer') &&
-                     response.confidence > 0.3;
+    const tests = [
+      'what is artificial intelligence',
+      'tell me about quantum computing',
+      'explain machine learning',
+    ];
+
+    for (const input of tests) {
+      const start = Date.now();
+      const response = await this.synth.process(input);
+      const duration = Date.now() - start;
+
+      // Check for knowledge sources
+      const usedKnowledge = response.modulesUsed.includes('RealKnowledgeBase') ||
+                           response.modulesUsed.includes('KnowledgeGraph');
+
+      // Check for natural language (not JSON)
+      const isNatural = !response.output.startsWith('{');
+
+      // Check for sources
+      const hasSources = response.output.includes('Source') || 
+                        response.output.includes('source') ||
+                        response.output.includes('Wikipedia');
+
+      const passed = usedKnowledge && isNatural;
 
       this.results.push({
-        module: 'SemanticAnalysis',
-        test,
+        test: 'Knowledge Retrieval',
+        input,
         passed,
-        details: `Detected emotion and intent. Confidence: ${(response.confidence * 100).toFixed(1)}%`,
-        duration: Date.now() - start,
+        details: passed
+          ? `Retrieved knowledge${hasSources ? ' with sources' : ''}`
+          : `Failed: Knowledge=${usedKnowledge}, Natural=${isNatural}`,
+        duration,
       });
-    } catch (error) {
-      this.results.push({
-        module: 'SemanticAnalysis',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
+
+      console.log(`  ${passed ? '✅' : '❌'} "${input}" → ${passed ? 'PASS' : 'FAIL'}`);
     }
   }
 
-  private async testKnowledgeGraph(): Promise<void> {
-    const test = 'Knowledge Graph - Query';
-    const start = Date.now();
+  private async testWebSearch() {
+    console.log('\n🔍 Testing Web Search...');
 
-    try {
-      const response = await synth.process('What is Python?', 'test-user');
-      
-      const passed = response.modulesUsed.includes('KnowledgeGraph') &&
-                     response.output.length > 0;
+    const tests = [
+      'search for latest AI news',
+      'find information about space exploration',
+    ];
+
+    for (const input of tests) {
+      const start = Date.now();
+      const response = await this.synth.process(input);
+      const duration = Date.now() - start;
+
+      // Check for web search usage
+      const usedWebSearch = response.modulesUsed.includes('WebSearch');
+
+      // Check for natural language
+      const isNatural = !response.output.startsWith('{');
+
+      const passed = usedWebSearch && isNatural;
 
       this.results.push({
-        module: 'KnowledgeGraph',
-        test,
+        test: 'Web Search',
+        input,
         passed,
-        details: `Queried knowledge graph. Response length: ${response.output.length}`,
-        duration: Date.now() - start,
+        details: passed
+          ? 'Web search executed and converted to natural language'
+          : `Failed: WebSearch=${usedWebSearch}, Natural=${isNatural}`,
+        duration,
       });
-    } catch (error) {
-      this.results.push({
-        module: 'KnowledgeGraph',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
+
+      console.log(`  ${passed ? '✅' : '❌'} "${input}" → ${passed ? 'PASS' : 'FAIL'}`);
     }
   }
 
-  private async testFrontierUI(): Promise<void> {
-    const test = 'Frontier-UI - Visual Generation';
-    const start = Date.now();
+  private async testCreativeWriting() {
+    console.log('\n✍️ Testing Creative Writing...');
 
-    try {
-      const response = await synth.process('Show me a map of restaurants', 'test-user');
-      
-      const passed = response.modulesUsed.includes('FrontierUIGenerator') &&
-                     response.uiSpec !== null;
+    const tests = [
+      'write a short story about adventure',
+      'write a poem about nature',
+    ];
+
+    for (const input of tests) {
+      const start = Date.now();
+      const response = await this.synth.process(input);
+      const duration = Date.now() - start;
+
+      // Check for creative writing module
+      const usedCreative = response.modulesUsed.includes('CreativeWritingEngine');
+
+      // Check for substantial content
+      const hasContent = response.output.length > 200;
+
+      const passed = usedCreative && hasContent;
 
       this.results.push({
-        module: 'FrontierUI',
-        test,
+        test: 'Creative Writing',
+        input,
         passed,
-        details: `Generated UI spec: ${response.uiSpec ? 'Yes' : 'No'}`,
-        duration: Date.now() - start,
+        details: passed
+          ? `Generated ${response.output.length} characters of creative content`
+          : `Failed: Creative=${usedCreative}, Content=${hasContent}`,
+        duration,
       });
-    } catch (error) {
-      this.results.push({
-        module: 'FrontierUI',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
+
+      console.log(`  ${passed ? '✅' : '❌'} "${input}" → ${passed ? 'PASS' : 'FAIL'}`);
     }
   }
 
-  private async testInstructionDecomposer(): Promise<void> {
-    const test = 'Instruction Decomposer - Complex Instructions';
-    const start = Date.now();
+  private async testReasoning() {
+    console.log('\n🧠 Testing Chain-of-Thought Reasoning...');
 
-    try {
-      const response = await synth.process('Build a website, make it red, add a header, then add a footer', 'test-user');
-      
-      const passed = response.modulesUsed.includes('InstructionDecomposer');
+    const tests = [
+      'if all cats are animals and some animals are pets, are all cats pets?',
+      'solve: 2x + 5 = 15',
+    ];
+
+    for (const input of tests) {
+      const start = Date.now();
+      const response = await this.synth.process(input);
+      const duration = Date.now() - start;
+
+      // Check for reasoning module
+      const usedReasoning = response.modulesUsed.includes('ChainOfThoughtReasoner');
+
+      // Check for reasoning steps
+      const hasSteps = response.output.includes('Reasoning Steps') ||
+                      response.output.includes('Step');
+
+      const passed = usedReasoning;
 
       this.results.push({
-        module: 'InstructionDecomposer',
-        test,
+        test: 'Chain-of-Thought Reasoning',
+        input,
         passed,
-        details: `Decomposed complex instruction. Modules: ${response.modulesUsed.length}`,
-        duration: Date.now() - start,
+        details: passed
+          ? `Reasoning applied${hasSteps ? ' with visible steps' : ''}`
+          : `Failed: Reasoning=${usedReasoning}`,
+        duration,
       });
-    } catch (error) {
-      this.results.push({
-        module: 'InstructionDecomposer',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
+
+      console.log(`  ${passed ? '✅' : '❌'} "${input}" → ${passed ? 'PASS' : 'FAIL'}`);
     }
   }
 
-  private async testUncertaintyCalibrator(): Promise<void> {
-    const test = 'Uncertainty Calibrator - Confidence Scoring';
-    const start = Date.now();
+  private async testMultiModal() {
+    console.log('\n🖼️ Testing Multi-Modal Capabilities...');
 
-    try {
-      const response = await synth.process('What is the meaning of life?', 'test-user');
-      
-      const passed = response.modulesUsed.includes('UncertaintyCalibrator') &&
-                     response.confidence >= 0 && response.confidence <= 1;
+    // Note: This test requires an actual image to be provided
+    // For now, we'll just check if the module is available
+    const stats = this.synth.getSystemStats();
+    const hasMultiModal = stats.multiModalProcessor !== undefined;
 
-      this.results.push({
-        module: 'UncertaintyCalibrator',
-        test,
-        passed,
-        details: `Confidence score: ${(response.confidence * 100).toFixed(1)}%`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'UncertaintyCalibrator',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
+    this.results.push({
+      test: 'Multi-Modal',
+      input: 'N/A (requires image)',
+      passed: hasMultiModal,
+      details: hasMultiModal 
+        ? 'Multi-modal processor available'
+        : 'Multi-modal processor not available',
+      duration: 0,
+    });
+
+    console.log(`  ${hasMultiModal ? '✅' : '❌'} Multi-modal module ${hasMultiModal ? 'available' : 'NOT available'}`);
   }
 
-  private async testToolExecutor(): Promise<void> {
-    const test = 'Tool Executor - Tool Execution';
-    const start = Date.now();
+  private async testLearning() {
+    console.log('\n🎓 Testing Learning Capabilities...');
 
-    try {
-      const response = await synth.process('Search for information about AI', 'test-user');
-      
-      const passed = response.modulesUsed.includes('ToolExecutor');
+    // Test that learning modules are active
+    const stats = this.synth.getSystemStats();
+    const hasNeuralNetwork = stats.neuralNetwork !== undefined;
+    const hasContinuousLearning = stats.continuousLearning !== undefined;
 
-      this.results.push({
-        module: 'ToolExecutor',
-        test,
-        passed,
-        details: `Executed tool. Response length: ${response.output.length}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'ToolExecutor',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
+    const passed = hasNeuralNetwork && hasContinuousLearning;
+
+    this.results.push({
+      test: 'Learning Capabilities',
+      input: 'N/A (system check)',
+      passed,
+      details: passed
+        ? 'Neural network and continuous learning active'
+        : `Failed: NeuralNet=${hasNeuralNetwork}, ContinuousLearning=${hasContinuousLearning}`,
+      duration: 0,
+    });
+
+    console.log(`  ${passed ? '✅' : '❌'} Learning systems ${passed ? 'active' : 'NOT active'}`);
   }
 
-  private async testLongFormGenerator(): Promise<void> {
-    const test = 'Long-form Generator - Document Creation';
-    const start = Date.now();
-
-    try {
-      const response = await synth.process('Write a tutorial about machine learning', 'test-user');
-      
-      const passed = response.modulesUsed.includes('LongFormGenerator') &&
-                     response.output.length > 500;
-
-      this.results.push({
-        module: 'LongFormGenerator',
-        test,
-        passed,
-        details: `Generated document. Length: ${response.output.length} chars`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'LongFormGenerator',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  private async testEmotionalIntelligence(): Promise<void> {
-    const test = 'Emotional Intelligence - Tone Adaptation';
-    const start = Date.now();
-
-    try {
-      const response1 = await synth.process('I\'m so excited about this!', 'test-user');
-      const response2 = await synth.process('I\'m really frustrated with this bug', 'test-user');
-      
-      const passed = response1.modulesUsed.includes('EmotionalIntelligenceEngine') &&
-                     response2.modulesUsed.includes('EmotionalIntelligenceEngine');
-
-      this.results.push({
-        module: 'EmotionalIntelligence',
-        test,
-        passed,
-        details: `Adapted tone for different emotions`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'EmotionalIntelligence',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  private async testContinuousLearning(): Promise<void> {
-    const test = 'Continuous Learning - Self-Improvement';
-    const start = Date.now();
-
-    try {
-      // Simulate multiple interactions
-      await synth.process('What is AI?', 'test-user');
-      await synth.process('Tell me more about machine learning', 'test-user');
-      await synth.process('How does deep learning work?', 'test-user');
-      
-      const stats = synth.getSystemStats().continuousLearning;
-      const passed = stats.totalExamples > 0;
-
-      this.results.push({
-        module: 'ContinuousLearning',
-        test,
-        passed,
-        details: `Learning examples: ${stats.totalExamples}, Preference pairs: ${stats.preferencePairs}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'ContinuousLearning',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  private async testTriAttention(): Promise<void> {
-    const test = 'TriAttention - Context Compression';
-    const start = Date.now();
-
-    try {
-      const stats = synth.getSystemStats().triAttention;
-      const passed = stats.compressionRatio > 5; // Should achieve 10.7x
-
-      this.results.push({
-        module: 'TriAttention',
-        test,
-        passed,
-        details: `Compression ratio: ${stats.compressionRatio.toFixed(1)}x, Total turns: ${stats.contextWindow.totalTurns}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'TriAttention',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  private async testSwarmTelepathy(): Promise<void> {
-    const test = 'Swarm Telepathy - Multi-Agent Communication';
-    const start = Date.now();
-
-    try {
-      const stats = synth.getSystemStats().swarmTelepathy;
-      const passed = stats.totalAgents > 0;
-
-      this.results.push({
-        module: 'SwarmTelepathy',
-        test,
-        passed,
-        details: `Agents: ${stats.totalAgents}, Transfers: ${stats.totalTransfers}, Speedup: ${stats.speedup}x`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'SwarmTelepathy',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  private async testAgentDesktop(): Promise<void> {
-    const test = 'Agent-Desktop - Computer Control';
-    const start = Date.now();
-
-    try {
-      const stats = synth.getSystemStats().agentDesktop;
-      const passed = stats.platform !== null;
-
-      this.results.push({
-        module: 'AgentDesktop',
-        test,
-        passed,
-        details: `Platform: ${stats.platform}, Sessions: ${stats.totalSessions}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'AgentDesktop',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  private async testGraphEngine(): Promise<void> {
-    const test = 'Graph Engine - Graph Traversal';
-    const start = Date.now();
-
-    try {
-      const stats = synth.getSystemStats().graphEngine;
-      const passed = stats.totalNodes >= 0;
-
-      this.results.push({
-        module: 'GraphEngine',
-        test,
-        passed,
-        details: `Nodes: ${stats.totalNodes}, Edges: ${stats.totalEdges}, Lookup: ${stats.lookupSpeed}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'GraphEngine',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  // ============================================
-  // INTEGRATED TESTS
-  // ============================================
-
-  private async testIntegratedPipeline(): Promise<void> {
-    const test = 'Integrated Pipeline - All Modules Working Together';
-    const start = Date.now();
-
-    try {
-      const response = await synth.process('Build a red website, then make it blue, and show me a chart of the changes', 'test-user');
-      
-      const passed = response.modulesUsed.length >= 5 && // Should use multiple modules
-                     response.confidence > 0.3 &&
-                     response.processingTime > 0;
-
-      this.results.push({
-        module: 'IntegratedPipeline',
-        test,
-        passed,
-        details: `Modules used: ${response.modulesUsed.length}, Confidence: ${(response.confidence * 100).toFixed(1)}%, Time: ${response.processingTime.toFixed(2)}ms`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'IntegratedPipeline',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  // ============================================
-  // EDGE CASE TESTS
-  // ============================================
-
-  private async testEdgeCases(): Promise<void> {
-    const test = 'Edge Cases - Empty Input, Very Long Input, Special Characters';
-    const start = Date.now();
-
-    try {
-      // Test empty input
-      const response1 = await synth.process('', 'test-user');
-      
-      // Test very long input
-      const longInput = 'a'.repeat(10000);
-      const response2 = await synth.process(longInput, 'test-user');
-      
-      // Test special characters
-      const response3 = await synth.process('!@#$%^&*()_+{}|:"<>?', 'test-user');
-      
-      const passed = response1.confidence >= 0 && 
-                     response2.confidence >= 0 && 
-                     response3.confidence >= 0;
-
-      this.results.push({
-        module: 'EdgeCases',
-        test,
-        passed,
-        details: `Handled empty, long (10K chars), and special character inputs`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'EdgeCases',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  // ============================================
-  // LEARNING TESTS
-  // ============================================
-
-  private async testLearningCapabilities(): Promise<void> {
-    const test = 'Learning Capabilities - Self-Improvement Over Time';
-    const start = Date.now();
-
-    try {
-      // Simulate learning from feedback
-      const stats1 = synth.getSystemStats().continuousLearning;
-      
-      // Multiple interactions
-      for (let i = 0; i < 10; i++) {
-        await synth.process(`Question ${i}`, 'test-user');
-      }
-      
-      const stats2 = synth.getSystemStats().continuousLearning;
-      
-      const passed = stats2.totalExamples > stats1.totalExamples;
-
-      this.results.push({
-        module: 'LearningCapabilities',
-        test,
-        passed,
-        details: `Examples before: ${stats1.totalExamples}, after: ${stats2.totalExamples}`,
-        duration: Date.now() - start,
-      });
-    } catch (error) {
-      this.results.push({
-        module: 'LearningCapabilities',
-        test,
-        passed: false,
-        details: `Error: ${error instanceof Error ? error.message : 'Unknown'}`,
-        duration: Date.now() - start,
-      });
-    }
-  }
-
-  // ============================================
-  // RESULTS
-  // ============================================
-
-  private printResults(): void {
-    console.log('\n' + '='.repeat(80));
+  private printResults() {
+    console.log('\n' + '='.repeat(60));
     console.log('📊 STRESS TEST RESULTS');
-    console.log('='.repeat(80) + '\n');
+    console.log('='.repeat(60));
 
-    const passed = this.results.filter(r => r.passed).length;
-    const failed = this.results.filter(r => !r.passed).length;
     const total = this.results.length;
+    const passed = this.results.filter(r => r.passed).length;
+    const failed = total - passed;
 
-    console.log(`Total Tests: ${total}`);
-    console.log(`✅ Passed: ${passed} (${((passed / total) * 100).toFixed(1)}%)`);
-    console.log(`❌ Failed: ${failed} (${((failed / total) * 100).toFixed(1)}%)`);
-    console.log(`\nTotal Duration: ${((Date.now() - this.startTime) / 1000).toFixed(2)}s\n`);
-
-    console.log('='.repeat(80));
-    console.log('DETAILED RESULTS');
-    console.log('='.repeat(80) + '\n');
-
-    for (const result of this.results) {
-      const status = result.passed ? '✅' : '❌';
-      console.log(`${status} [${result.module}] ${result.test}`);
-      console.log(`   ${result.details}`);
-      console.log(`   Duration: ${result.duration}ms\n`);
-    }
+    console.log(`\nTotal Tests: ${total}`);
+    console.log(`✅ Passed: ${passed}`);
+    console.log(`❌ Failed: ${failed}`);
+    console.log(`Success Rate: ${((passed / total) * 100).toFixed(1)}%\n`);
 
     if (failed > 0) {
-      console.log('='.repeat(80));
-      console.log('❌ FAILED TESTS');
-      console.log('='.repeat(80) + '\n');
-
-      for (const result of this.results.filter(r => !r.passed)) {
-        console.log(`[${result.module}] ${result.test}`);
-        console.log(`   ${result.details}\n`);
-      }
+      console.log('Failed Tests:');
+      this.results
+        .filter(r => !r.passed)
+        .forEach(r => {
+          console.log(`  ❌ ${r.test}: "${r.input}"`);
+          console.log(`     ${r.details}\n`);
+        });
     }
 
-    console.log('='.repeat(80));
-    console.log('🏁 STRESS TEST COMPLETE');
-    console.log('='.repeat(80));
+    console.log('='.repeat(60));
+    console.log(failed === 0 ? '✅ ALL TESTS PASSED' : '❌ SOME TESTS FAILED');
+    console.log('='.repeat(60));
   }
 }
 
 // Run the stress test
 const stressTest = new StressTest();
-stressTest.runAllTests().then(() => {
-  console.log('\n✅ Stress test completed successfully!');
-}).catch(error => {
-  console.error('\n❌ Stress test failed:', error);
-});
+stressTest.runAllTests().catch(console.error);

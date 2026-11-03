@@ -140,12 +140,38 @@ export class MultiLayerSemanticAnalyzer {
   private analyzeIntent(input: string): SemanticLayer {
     const lower = input.toLowerCase();
     
-    // Intent classification
+    // Intent classification - ORDER MATTERS! Check conversational intents first
     let intent = 'unknown';
     let confidence = 0.5;
     
-    if (lower.includes('create') || lower.includes('build') || lower.includes('make') || 
-        lower.includes('generate') || lower.includes('write')) {
+    // Check greetings FIRST (before queries)
+    const greetings = ['hello', 'hi', 'hey', 'yo', 'sup', 'what\'s up', 'whats up', 'howdy', 'hola', 'heya', 'hiya', 'wassup', 'wazzup', 'greetings'];
+    if (greetings.some(g => lower.startsWith(g) || lower === g || lower.includes(g + ' '))) {
+      intent = 'greeting';
+      confidence = 0.95;
+    }
+    // Check farewells
+    else if (lower.includes('bye') || lower.includes('goodbye') || lower.includes('see ya') || 
+             lower.includes('see you') || lower.includes('later') || lower.includes('take care')) {
+      intent = 'farewell';
+      confidence = 0.95;
+    }
+    // Check thanks
+    else if (lower.includes('thanks') || lower.includes('thank you') || lower.includes('thx') || 
+             lower.includes('ty') || lower.includes('appreciate')) {
+      intent = 'gratitude';
+      confidence = 0.95;
+    }
+    // Check small talk
+    else if (lower.includes('how are you') || lower.includes('how\'s it going') || 
+             lower.includes('how you doing') || lower.includes('what\'s new') || 
+             lower.includes('whats new') || lower.includes('how\'s your day')) {
+      intent = 'smalltalk';
+      confidence = 0.9;
+    }
+    // Now check action intents
+    else if (lower.includes('create') || lower.includes('build') || lower.includes('make') || 
+             lower.includes('generate') || lower.includes('write')) {
       intent = 'creation';
       confidence = 0.9;
     } else if (lower.includes('modify') || lower.includes('change') || lower.includes('update') || 
@@ -155,19 +181,16 @@ export class MultiLayerSemanticAnalyzer {
     } else if (lower.includes('delete') || lower.includes('remove') || lower.includes('clear')) {
       intent = 'deletion';
       confidence = 0.9;
-    } else if (lower.includes('find') || lower.includes('search') || lower.includes('lookup') || 
-               lower.includes('what') || lower.includes('how') || lower.includes('why')) {
-      intent = 'query';
-      confidence = 0.85;
     } else if (lower.includes('analyze') || lower.includes('calculate') || lower.includes('solve')) {
       intent = 'analysis';
       confidence = 0.85;
-    } else if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
-      intent = 'greeting';
-      confidence = 0.95;
-    } else if (lower.includes('thanks') || lower.includes('thank you')) {
-      intent = 'gratitude';
-      confidence = 0.95;
+    }
+    // Check queries LAST (after conversational intents)
+    else if (lower.includes('find') || lower.includes('search') || lower.includes('lookup') || 
+             lower.includes('what') || lower.includes('how') || lower.includes('why') ||
+             lower.includes('who') || lower.includes('when') || lower.includes('where')) {
+      intent = 'query';
+      confidence = 0.85;
     }
 
     // Detect sub-intent

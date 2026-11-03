@@ -29,6 +29,7 @@ import { EnhancedCodeGenerator } from './enhanced-code-generator';
 import { CreativeWritingEngine } from './creative-writing';
 import { ChainOfThoughtReasoner } from './chain-of-thought';
 import { PerformanceOptimizer } from './performance-optimizer';
+import { ConversationalResponder } from './conversational-responder';
 import { logger } from './logger';
 
 export interface SynthConfig {
@@ -80,6 +81,7 @@ export class SynthSAI {
   private creativeWritingEngine: CreativeWritingEngine;
   private chainOfThoughtReasoner: ChainOfThoughtReasoner;
   private performanceOptimizer: PerformanceOptimizer;
+  private conversationalResponder: ConversationalResponder;
 
   private config: SynthConfig;
 
@@ -128,8 +130,9 @@ export class SynthSAI {
     this.creativeWritingEngine = new CreativeWritingEngine();
     this.chainOfThoughtReasoner = new ChainOfThoughtReasoner();
     this.performanceOptimizer = new PerformanceOptimizer();
+    this.conversationalResponder = new ConversationalResponder();
 
-    console.log('[SynthSAI] All 26 modules initialized (16 original + 10 new real modules)');
+    console.log('[SynthSAI] All 27 modules initialized (16 original + 11 new real modules)');
     console.log('[SynthSAI] Configuration:', this.config);
   }
 
@@ -260,8 +263,19 @@ export class SynthSAI {
         let output = '';
         let uiSpec = null;
 
+        // Check if this is a conversational intent (greeting, farewell, small talk, etc.)
+        if (this.isConversationalIntent(intent, input)) {
+          logger.info('SynthSAI', 'Generating conversational response');
+          output = await this.conversationalResponder.generateResponse(input, {
+            intent,
+            emotion: emotionalState.primaryEmotion,
+            entities: entities.map(e => e.name),
+            conversationHistory: []
+          });
+          modulesUsed.push('ConversationalResponder');
+        }
         // Check if code generation is needed
-        if (this.needsCodeGeneration(input, intent)) {
+        else if (this.needsCodeGeneration(input, intent)) {
           logger.info('SynthSAI', 'Generating real code');
           const codeResult = await this.enhancedCodeGenerator.generateCode(input);
           output = '```' + codeResult.language + '\n' + codeResult.code + '\n```\n\n' + codeResult.explanation;
@@ -304,12 +318,19 @@ export class SynthSAI {
             words: longForm.progress.wordsGenerated
           });
         }
-        // Check if tool execution is needed
+        // Check if tool execution is needed (for actual queries, not greetings)
         else if (this.needsToolExecution(input, intent)) {
           const toolResult = await this.toolExecutor.executeTool('search_knowledge', { query: input });
-          output = toolResult.success ? JSON.stringify(toolResult.output) : 'Tool execution failed';
-          modulesUsed.push('ToolExecutor');
-          logger.info('ToolExecutor', 'Tool executed', {
+          
+          // Convert tool result to natural language
+          if (toolResult.success && toolResult.output) {
+            output = this.conversationalResponder.convertToolResultToNaturalLanguage(toolResult.output, input);
+          } else {
+            output = 'I wasn\'t able to find information on that. Could you try rephrasing your question?';
+          }
+          
+          modulesUsed.push('ToolExecutor', 'ConversationalResponder');
+          logger.info('ToolExecutor', 'Tool executed and converted to natural language', {
             tool: 'search_knowledge',
             success: toolResult.success
           });
@@ -461,9 +482,49 @@ export class SynthSAI {
   }
 
   private needsToolExecution(input: string, intent: string): boolean {
+    // Don't execute tools for conversational intents
+    if (this.isConversationalIntent(intent, input)) {
+      return false;
+    }
+    
     return intent === 'query' || 
            input.toLowerCase().includes('search') ||
            input.toLowerCase().includes('find');
+  }
+
+  private isConversationalIntent(intent: string, input: string): boolean {
+    const lower = input.toLowerCase().trim();
+    
+    // Check intent
+    if (intent === 'greeting' || intent === 'farewell' || intent === 'thanks') {
+      return true;
+    }
+    
+    // Check for greeting patterns
+    const greetings = ['hi', 'hello', 'hey', 'yo', 'sup', 'what\'s up', 'whats up', 'howdy', 'hola'];
+    if (greetings.some(g => lower.startsWith(g) || lower === g)) {
+      return true;
+    }
+    
+    // Check for small talk
+    const smallTalk = ['how are you', 'how\'s it going', 'how you doing', 'what\'s new', 'whats new'];
+    if (smallTalk.some(s => lower.includes(s))) {
+      return true;
+    }
+    
+    // Check for farewells
+    const farewells = ['bye', 'goodbye', 'see ya', 'see you', 'later', 'take care'];
+    if (farewells.some(f => lower.includes(f))) {
+      return true;
+    }
+    
+    // Check for thanks
+    const thanks = ['thanks', 'thank you', 'thx', 'ty', 'appreciate it'];
+    if (thanks.some(t => lower.includes(t))) {
+      return true;
+    }
+    
+    return false;
   }
 
   private generateStandardResponse(
@@ -643,6 +704,7 @@ export class SynthSAI {
       creativeWritingEngine: this.creativeWritingEngine.getStats(),
       chainOfThoughtReasoner: this.chainOfThoughtReasoner.getStats(),
       performanceOptimizer: this.performanceOptimizer.getStats(),
+      conversationalResponder: this.conversationalResponder.getStats(),
     };
   }
 
