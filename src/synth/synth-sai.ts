@@ -19,6 +19,7 @@ import { TriAttentionCompressor } from './triattention-compressor';
 import { SwarmTelepathy, SwarmConfig } from './swarm-telepathy';
 import { AgentDesktop } from './agent-desktop';
 import { GraphEngine } from './graph-engine';
+import { logger } from './logger';
 
 export interface SynthConfig {
   maxContextTokens: number;
@@ -105,99 +106,186 @@ export class SynthSAI {
   async process(input: string, userId?: string): Promise<SynthResponse> {
     const startTime = performance.now();
     const modulesUsed: string[] = [];
+    const errors: string[] = [];
 
-    // Step 1: Semantic Analysis (6-layer deep understanding)
-    const semanticAnalysis = this.semanticAnalyzer.analyze(input);
-    modulesUsed.push('MultiLayerSemanticAnalyzer');
+    logger.info('SynthSAI', 'Processing started', { inputLength: input.length, userId });
 
-    // Step 2: Conversation State (context tracking)
-    const { resolvedEntityId, intent, emotion } = this.conversationState.startTurn(input);
-    modulesUsed.push('ConversationStateMachine');
+    try {
+      // Step 1: Semantic Analysis (6-layer deep understanding)
+      logger.debug('SynthSAI', 'Step 1: Semantic Analysis');
+      const semanticAnalysis = this.semanticAnalyzer.analyze(input);
+      modulesUsed.push('MultiLayerSemanticAnalyzer');
+      logger.success('MultiLayerSemanticAnalyzer', 'Analysis complete', {
+        intent: semanticAnalysis.synthesized.intent,
+        emotion: semanticAnalysis.synthesized.emotion,
+        confidence: semanticAnalysis.synthesized.confidence
+      });
 
-    // Step 3: Emotional Intelligence (tone adaptation)
-    const emotionalState = this.emotionalIntelligence.detectEmotion(input);
-    modulesUsed.push('EmotionalIntelligenceEngine');
+      // Step 2: Conversation State (context tracking)
+      logger.debug('SynthSAI', 'Step 2: Conversation State');
+      const { resolvedEntityId, intent, emotion } = this.conversationState.startTurn(input);
+      modulesUsed.push('ConversationStateMachine');
+      logger.info('ConversationStateMachine', 'Turn started', { intent, emotion, resolvedEntityId });
 
-    // Step 4: Model Selection (choose right SAI model type)
-    const selectedModel = this.modelManager.selectModel(intent, 'text');
-    this.modelManager.useModel(selectedModel);
-    modulesUsed.push(`SAIModelManager:${selectedModel}`);
+      // Step 3: Emotional Intelligence (tone adaptation)
+      logger.debug('SynthSAI', 'Step 3: Emotional Intelligence');
+      const emotionalState = this.emotionalIntelligence.detectEmotion(input);
+      modulesUsed.push('EmotionalIntelligenceEngine');
+      logger.info('EmotionalIntelligenceEngine', 'Emotion detected', {
+        emotion: emotionalState.primaryEmotion,
+        intensity: emotionalState.intensity
+      });
 
-    // Step 5: Knowledge Retrieval (from knowledge graph + atomic memory)
-    const knowledgeAnswer = this.knowledgeGraph.query(input);
-    modulesUsed.push('KnowledgeGraph');
+      // Step 4: Model Selection (choose right SAI model type)
+      logger.debug('SynthSAI', 'Step 4: Model Selection');
+      const selectedModel = this.modelManager.selectModel(intent, 'text');
+      this.modelManager.useModel(selectedModel);
+      modulesUsed.push(`SAIModelManager:${selectedModel}`);
+      logger.info('SAIModelManager', 'Model selected', { model: selectedModel });
 
-    // Step 6: Instruction Decomposition (if complex)
-    let instruction = null;
-    if (intent === 'modification' || intent === 'creation') {
-      instruction = this.instructionDecomposer.decompose(input);
-      modulesUsed.push('InstructionDecomposer');
+      // Step 5: Knowledge Retrieval (from knowledge graph + atomic memory)
+      logger.debug('SynthSAI', 'Step 5: Knowledge Retrieval');
+      const knowledgeAnswer = this.knowledgeGraph.query(input);
+      modulesUsed.push('KnowledgeGraph');
+      logger.info('KnowledgeGraph', 'Query complete', {
+        confidence: knowledgeAnswer.confidence,
+        sources: knowledgeAnswer.sources.length
+      });
+
+      // Step 6: Instruction Decomposition (if complex)
+      let instruction = null;
+      if (intent === 'modification' || intent === 'creation') {
+        logger.debug('SynthSAI', 'Step 6: Instruction Decomposition');
+        instruction = this.instructionDecomposer.decompose(input);
+        modulesUsed.push('InstructionDecomposer');
+        logger.info('InstructionDecomposer', 'Decomposed', {
+          steps: instruction.decomposed.length,
+          constraints: instruction.constraints.length
+        });
+      }
+
+      // Step 7: Generate Response
+      logger.debug('SynthSAI', 'Step 7: Response Generation');
+      let output = '';
+      let uiSpec = null;
+
+      // Check if UI generation is needed
+      if (this.needsUIGeneration(input, intent)) {
+        uiSpec = this.frontierUI.generateSpec(input);
+        output = this.frontierUI.renderToHTML(uiSpec);
+        modulesUsed.push('FrontierUIGenerator');
+        logger.info('FrontierUIGenerator', 'UI generated', { blocks: uiSpec.blocks.length });
+      } else if (this.needsLongForm(input)) {
+        const longForm = await this.longFormGenerator.generateDocument(input);
+        output = longForm.content;
+        modulesUsed.push('LongFormGenerator');
+        logger.info('LongFormGenerator', 'Document generated', {
+          sections: longForm.outline.sections.length,
+          words: longForm.progress.wordsGenerated
+        });
+      } else if (this.needsToolExecution(input, intent)) {
+        const toolResult = await this.toolExecutor.executeTool('search_knowledge', { query: input });
+        output = toolResult.success ? JSON.stringify(toolResult.output) : 'Tool execution failed';
+        modulesUsed.push('ToolExecutor');
+        logger.info('ToolExecutor', 'Tool executed', {
+          tool: 'search_knowledge',
+          success: toolResult.success
+        });
+      } else {
+        // Standard response
+        output = this.generateStandardResponse(input, knowledgeAnswer, semanticAnalysis);
+        logger.info('SynthSAI', 'Standard response generated');
+      }
+
+      // Step 8: Uncertainty Calibration
+      logger.debug('SynthSAI', 'Step 8: Uncertainty Calibration');
+      const confidence = this.uncertaintyCalibrator.calibrate(input, output);
+      output = this.uncertaintyCalibrator.addConfidenceDisclaimer(output, confidence);
+      modulesUsed.push('UncertaintyCalibrator');
+      logger.info('UncertaintyCalibrator', 'Calibrated', {
+        score: confidence.score,
+        recommendation: confidence.recommendation
+      });
+
+      // Step 9: Emotional Adaptation
+      logger.debug('SynthSAI', 'Step 9: Emotional Adaptation');
+      output = this.emotionalIntelligence.adaptResponse(output, emotionalState, userId);
+      logger.info('EmotionalIntelligenceEngine', 'Response adapted to emotion');
+
+      // Step 10: Record in conversation state
+      logger.debug('SynthSAI', 'Step 10: Recording conversation');
+      this.conversationState.endTurn(
+        input,
+        output,
+        [],
+        resolvedEntityId ? [resolvedEntityId] : [],
+        resolvedEntityId ? [resolvedEntityId] : [],
+        intent,
+        emotion
+      );
+
+      // Step 11: Record in TriAttention (context compression)
+      if (this.config.enableCompression) {
+        logger.debug('SynthSAI', 'Step 11: Context compression');
+        this.triAttention.addTurn(input, output);
+        modulesUsed.push('TriAttentionCompressor');
+        logger.info('TriAttentionCompressor', 'Turn added to context');
+      }
+
+      // Step 12: Continuous Learning (if enabled)
+      if (this.config.enableLearning && userId) {
+        logger.debug('SynthSAI', 'Step 12: Continuous learning');
+        this.emotionalIntelligence.recordInteraction(userId, input, emotion, output);
+        this.continuousLearning.learnFromUserFeedback(input, output, undefined, 4);
+        modulesUsed.push('ContinuousLearningEngine');
+        logger.info('ContinuousLearningEngine', 'Learning recorded');
+      }
+
+      const processingTime = performance.now() - startTime;
+
+      // Log conversation
+      logger.logConversation({
+        userInput: input,
+        synthOutput: output,
+        modulesUsed,
+        confidence: confidence.score,
+        processingTime,
+        emotionalState: emotionalState.primaryEmotion,
+        intent,
+        errors
+      });
+
+      logger.success('SynthSAI', 'Processing complete', {
+        processingTime,
+        modulesUsed: modulesUsed.length,
+        confidence: confidence.score
+      });
+
+      return {
+        output,
+        confidence: confidence.score,
+        modelUsed: selectedModel,
+        modulesUsed,
+        processingTime,
+        uiSpec,
+      };
+
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('SynthSAI', 'Processing failed', { error: errorMessage });
+      errors.push(errorMessage);
+
+      const processingTime = performance.now() - startTime;
+
+      return {
+        output: `Error: ${errorMessage}`,
+        confidence: 0,
+        modelUsed: 'SLM' as SAIModelType,
+        modulesUsed,
+        processingTime,
+        uiSpec: null,
+      };
     }
-
-    // Step 7: Generate Response
-    let output = '';
-    let uiSpec = null;
-
-    // Check if UI generation is needed
-    if (this.needsUIGeneration(input, intent)) {
-      uiSpec = this.frontierUI.generateSpec(input);
-      output = this.frontierUI.renderToHTML(uiSpec);
-      modulesUsed.push('FrontierUIGenerator');
-    } else if (this.needsLongForm(input)) {
-      const longForm = await this.longFormGenerator.generateDocument(input);
-      output = longForm.content;
-      modulesUsed.push('LongFormGenerator');
-    } else if (this.needsToolExecution(input, intent)) {
-      const toolResult = await this.toolExecutor.executeTool('search_knowledge', { query: input });
-      output = toolResult.success ? JSON.stringify(toolResult.output) : 'Tool execution failed';
-      modulesUsed.push('ToolExecutor');
-    } else {
-      // Standard response
-      output = this.generateStandardResponse(input, knowledgeAnswer, semanticAnalysis);
-    }
-
-    // Step 8: Uncertainty Calibration
-    const confidence = this.uncertaintyCalibrator.calibrate(input, output);
-    output = this.uncertaintyCalibrator.addConfidenceDisclaimer(output, confidence);
-    modulesUsed.push('UncertaintyCalibrator');
-
-    // Step 9: Emotional Adaptation
-    output = this.emotionalIntelligence.adaptResponse(output, emotionalState, userId);
-
-    // Step 10: Record in conversation state
-    this.conversationState.endTurn(
-      input,
-      output,
-      [],
-      resolvedEntityId ? [resolvedEntityId] : [],
-      resolvedEntityId ? [resolvedEntityId] : [],
-      intent,
-      emotion
-    );
-
-    // Step 11: Record in TriAttention (context compression)
-    if (this.config.enableCompression) {
-      this.triAttention.addTurn(input, output);
-      modulesUsed.push('TriAttentionCompressor');
-    }
-
-    // Step 12: Continuous Learning (if enabled)
-    if (this.config.enableLearning && userId) {
-      this.emotionalIntelligence.recordInteraction(userId, input, emotion, output);
-      this.continuousLearning.learnFromUserFeedback(input, output, undefined, 4);
-      modulesUsed.push('ContinuousLearningEngine');
-    }
-
-    const processingTime = performance.now() - startTime;
-
-    return {
-      output,
-      confidence: confidence.score,
-      modelUsed: selectedModel,
-      modulesUsed,
-      processingTime,
-      uiSpec,
-    };
   }
 
   // ============================================
