@@ -36,6 +36,7 @@ import { SituationMonitor } from './situation-monitor';
 import { OsirisAI } from './osiris-ai';
 import { Floorplan } from './floorplan';
 import { PakePackager } from './pake-packager';
+import { SyntheticBrain, syntheticBrain } from './synthetic-brain';
 import { logger } from './logger';
 
 export interface SynthConfig {
@@ -96,6 +97,9 @@ export class SynthSAI {
   private osirisAI: OsirisAI;
   private floorplan: Floorplan;
   private pakePackager: PakePackager;
+  
+  // Synthetic AI Brain
+  private brain: SyntheticBrain;
 
   private config: SynthConfig;
 
@@ -158,8 +162,12 @@ export class SynthSAI {
       width: 1400,
       height: 900
     });
+    
+    // Initialize Synthetic Brain
+    this.brain = syntheticBrain;
+    this.brain.initialize();
 
-    console.log('[SynthSAI] All 33 modules initialized (27 original + 6 new tool integrations)');
+    console.log('[SynthSAI] All 33 modules + Synthetic Brain initialized');
     console.log('[SynthSAI] Configuration:', this.config);
   }
 
@@ -213,8 +221,26 @@ export class SynthSAI {
           intensity: emotionalState.intensity
         });
 
-        // Step 1e: Model Selection (choose right SAI model type)
-        logger.debug('SynthSAI', 'Step 1e: Model Selection');
+        // Step 1e: Synthetic Brain Processing
+        logger.debug('SynthSAI', 'Step 1e: Synthetic Brain Processing');
+        const brainInput = {
+          text: resolvedInput,
+          context: entities.map(e => e.name),
+          info: {
+            intent,
+            emotion: emotionalState.primaryEmotion,
+            turnNumber
+          }
+        };
+        const brainOutput = await this.brain.process(brainInput);
+        modulesUsed.push('SyntheticBrain');
+        logger.info('SyntheticBrain', 'Processing complete', {
+          confidence: brainOutput.confidence,
+          reasoningSteps: brainOutput.reasoning.length
+        });
+
+        // Step 1f: Model Selection (choose right SAI model type)
+        logger.debug('SynthSAI', 'Step 1f: Model Selection');
         const selectedModel = this.modelManager.selectModel(intent, 'text');
         this.modelManager.useModel(selectedModel);
         modulesUsed.push(`SAIModelManager:${selectedModel}`);
@@ -309,14 +335,23 @@ export class SynthSAI {
 
         // Check if this is a conversational intent (greeting, farewell, small talk, etc.)
         if (this.isConversationalIntent(intent, input)) {
-          logger.info('SynthSAI', 'Generating conversational response');
-          output = await this.conversationalResponder.generateResponse(input, {
-            intent,
-            emotion: emotionalState.primaryEmotion,
-            entities: entities.map(e => e.name),
-            conversationHistory: []
-          });
-          modulesUsed.push('ConversationalResponder');
+          logger.info('SynthSAI', 'Generating conversational response with Synthetic Brain');
+          
+          // Use brain output if confidence is high enough
+          if (brainOutput.confidence > 0.6) {
+            output = brainOutput.response;
+            logger.info('SyntheticBrain', 'Using brain response', { confidence: brainOutput.confidence });
+          } else {
+            // Fallback to conversational responder
+            output = await this.conversationalResponder.generateResponse(input, {
+              intent,
+              emotion: emotionalState.primaryEmotion,
+              entities: entities.map(e => e.name),
+              conversationHistory: []
+            });
+            logger.info('ConversationalResponder', 'Using fallback response');
+          }
+          modulesUsed.push('ConversationalResponder', 'SyntheticBrain');
         }
         // Check if real-time news/markets requested
         else if (this.needsRealTimeInfo(input)) {
@@ -942,6 +977,8 @@ export class SynthSAI {
       osirisAI: this.osirisAI.getStats(),
       floorplan: this.floorplan.getStats(),
       pakePackager: this.pakePackager.getStats(),
+      // Synthetic Brain
+      syntheticBrain: this.brain.getStats(),
     };
   }
 
