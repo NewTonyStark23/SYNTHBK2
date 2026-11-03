@@ -30,6 +30,12 @@ import { CreativeWritingEngine } from './creative-writing';
 import { ChainOfThoughtReasoner } from './chain-of-thought';
 import { PerformanceOptimizer } from './performance-optimizer';
 import { ConversationalResponder } from './conversational-responder';
+import { VaneSearch } from './vane-search';
+import { LightpandaBrowser } from './lightpanda-browser';
+import { SituationMonitor } from './situation-monitor';
+import { OsirisAI } from './osiris-ai';
+import { Floorplan } from './floorplan';
+import { PakePackager } from './pake-packager';
 import { logger } from './logger';
 
 export interface SynthConfig {
@@ -82,6 +88,14 @@ export class SynthSAI {
   private chainOfThoughtReasoner: ChainOfThoughtReasoner;
   private performanceOptimizer: PerformanceOptimizer;
   private conversationalResponder: ConversationalResponder;
+  
+  // New tool integrations
+  private vaneSearch: VaneSearch;
+  private lightpandaBrowser: LightpandaBrowser;
+  private situationMonitor: SituationMonitor;
+  private osirisAI: OsirisAI;
+  private floorplan: Floorplan;
+  private pakePackager: PakePackager;
 
   private config: SynthConfig;
 
@@ -131,8 +145,21 @@ export class SynthSAI {
     this.chainOfThoughtReasoner = new ChainOfThoughtReasoner();
     this.performanceOptimizer = new PerformanceOptimizer();
     this.conversationalResponder = new ConversationalResponder();
+    
+    // New tool integrations
+    this.vaneSearch = new VaneSearch();
+    this.lightpandaBrowser = new LightpandaBrowser();
+    this.situationMonitor = new SituationMonitor();
+    this.osirisAI = new OsirisAI();
+    this.floorplan = new Floorplan();
+    this.pakePackager = new PakePackager({
+      url: 'http://localhost:5173',
+      name: 'SynthSAI',
+      width: 1400,
+      height: 900
+    });
 
-    console.log('[SynthSAI] All 27 modules initialized (16 original + 11 new real modules)');
+    console.log('[SynthSAI] All 33 modules initialized (27 original + 6 new tool integrations)');
     console.log('[SynthSAI] Configuration:', this.config);
   }
 
@@ -207,21 +234,38 @@ export class SynthSAI {
           knowledgeAnswer = await this.realKnowledgeBase.answerQuestion(input);
           modulesUsed.push('RealKnowledgeBase');
           
-          // If still low confidence, try web search
+          // If still low confidence, try Vane AI search
           if (knowledgeAnswer.confidence < 0.6) {
-            logger.info('SynthSAI', 'Using web search');
-            webSearchResult = await this.webSearch.search(input);
-            modulesUsed.push('WebSearch');
-            
-            if (webSearchResult.instantAnswer) {
-              knowledgeAnswer = {
-                answer: webSearchResult.instantAnswer,
-                confidence: 0.7,
-                sources: webSearchResult.results.slice(0, 3).map((r: any) => ({
-                  title: r.title,
-                  url: r.url
-                }))
-              };
+            logger.info('SynthSAI', 'Using Vane AI search');
+            try {
+              const vaneResult = await this.vaneSearch.search(input, { mode: 'balanced' });
+              modulesUsed.push('VaneSearch');
+              
+              if (vaneResult.answer && vaneResult.confidence > 0.5) {
+                knowledgeAnswer = {
+                  answer: vaneResult.answer,
+                  confidence: vaneResult.confidence,
+                  sources: vaneResult.sources.slice(0, 3).map(s => ({
+                    title: s.title,
+                    url: s.url
+                  }))
+                };
+              }
+            } catch (error) {
+              logger.warning('VaneSearch', 'Failed, falling back to basic web search');
+              webSearchResult = await this.webSearch.search(input);
+              modulesUsed.push('WebSearch');
+              
+              if (webSearchResult.instantAnswer) {
+                knowledgeAnswer = {
+                  answer: webSearchResult.instantAnswer,
+                  confidence: 0.7,
+                  sources: webSearchResult.results.slice(0, 3).map((r: any) => ({
+                    title: r.title,
+                    url: r.url
+                  }))
+                };
+              }
             }
           }
         } else {
@@ -273,6 +317,135 @@ export class SynthSAI {
             conversationHistory: []
           });
           modulesUsed.push('ConversationalResponder');
+        }
+        // Check if real-time news/markets requested
+        else if (this.needsRealTimeInfo(input)) {
+          logger.info('SynthSAI', 'Fetching real-time information');
+          const context = await this.situationMonitor.getGlobalContext();
+          modulesUsed.push('SituationMonitor');
+          
+          output = `**Real-Time Global Context:**\n\n`;
+          output += `**Latest News:** ${context.news.slice(0, 3).map(n => n.title).join(', ')}\n\n`;
+          output += `**Markets:** ${context.markets.map(m => `${m.symbol}: $${m.price.toFixed(2)} (${m.changePercent > 0 ? '+' : ''}${m.changePercent.toFixed(2)}%)`).join(', ')}\n\n`;
+          output += `**Geopolitical Events:** ${context.events.length} active events\n`;
+          
+          logger.info('SituationMonitor', 'Real-time context fetched', {
+            newsCount: context.news.length,
+            marketsCount: context.markets.length,
+            eventsCount: context.events.length
+          });
+        }
+        // Check if global intelligence requested (flights, maritime, satellites)
+        else if (this.needsGlobalIntelligence(input)) {
+          logger.info('SynthSAI', 'Fetching global intelligence');
+          const [flights, maritime, satellites, earthquakes] = await Promise.all([
+            this.osirisAI.getFlightData(),
+            this.osirisAI.getMaritimeData(),
+            this.osirisAI.getSatelliteData(),
+            this.osirisAI.getEarthquakeData({ hours: 24 })
+          ]);
+          modulesUsed.push('OsirisAI');
+          
+          output = `**Global Intelligence Report:**\n\n`;
+          output += `**Flights Tracked:** ${flights.length}\n`;
+          if (flights.length > 0) {
+            output += `- ${flights[0].callsign}: ${flights[0].origin} → ${flights[0].destination} at ${flights[0].altitude}ft\n`;
+          }
+          output += `\n**Maritime Vessels:** ${maritime.length}\n`;
+          if (maritime.length > 0) {
+            output += `- ${maritime[0].name} (${maritime[0].type}) at ${maritime[0].latitude.toFixed(2)}, ${maritime[0].longitude.toFixed(2)}\n`;
+          }
+          output += `\n**Satellites:** ${satellites.length}\n`;
+          output += `\n**Recent Earthquakes (24h):** ${earthquakes.length}\n`;
+          if (earthquakes.length > 0) {
+            output += `- M${earthquakes[0].magnitude} ${earthquakes[0].location}\n`;
+          }
+          
+          logger.info('OsirisAI', 'Global intelligence fetched', {
+            flights: flights.length,
+            vessels: maritime.length,
+            satellites: satellites.length,
+            earthquakes: earthquakes.length
+          });
+        }
+        // Check if code visualization requested
+        else if (this.needsCodeVisualization(input)) {
+          logger.info('SynthSAI', 'Generating code visualization');
+          const codeMap = await this.floorplan.generateMap();
+          const health = await this.floorplan.runHealthCheck();
+          modulesUsed.push('Floorplan');
+          
+          output = `**Code Visualization:**\n\n`;
+          output += `**Components:** ${codeMap.stats.totalComponents}\n`;
+          output += `**Relationships:** ${codeMap.stats.totalRelationships}\n`;
+          output += `**Files:** ${codeMap.stats.totalFiles}\n\n`;
+          output += `**Health Check:** ${health.summary}\n`;
+          output += `**Score:** ${health.score}/100\n`;
+          
+          if (health.issues.length > 0) {
+            output += `\n**Issues Found:**\n`;
+            health.issues.forEach((issue, i) => {
+              output += `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.description}\n`;
+            });
+          }
+          
+          logger.info('Floorplan', 'Code visualization generated', {
+            components: codeMap.stats.totalComponents,
+            healthScore: health.score
+          });
+        }
+        // Check if browser automation requested
+        else if (this.needsBrowserAutomation(input)) {
+          logger.info('SynthSAI', 'Performing browser automation');
+          try {
+            const urlMatch = input.match(/https?:\/\/[^\s]+/);
+            const url = urlMatch ? urlMatch[0] : 'https://example.com';
+            
+            const result = await this.lightpandaBrowser.scrape(url, {
+              extractLinks: true,
+              extractImages: true
+            });
+            modulesUsed.push('LightpandaBrowser');
+            
+            output = `**Browser Automation Result:**\n\n`;
+            output += `**URL:** ${url}\n`;
+            output += `**Title:** ${result.title || 'N/A'}\n\n`;
+            output += `**Content Preview:**\n${result.content.substring(0, 500)}...\n\n`;
+            output += `**Links Found:** ${result.links?.length || 0}\n`;
+            output += `**Images Found:** ${result.images?.length || 0}\n`;
+            
+            logger.info('LightpandaBrowser', 'Page scraped', {
+              url,
+              links: result.links?.length || 0,
+              images: result.images?.length || 0
+            });
+          } catch (error) {
+            output = 'Browser automation failed. Lightpanda may not be running.';
+            logger.error('LightpandaBrowser', 'Scrape failed', { error });
+          }
+        }
+        // Check if desktop packaging requested
+        else if (this.needsDesktopPackaging(input)) {
+          logger.info('SynthSAI', 'Packaging desktop application');
+          const results = await this.pakePackager.packageAll();
+          modulesUsed.push('PakePackager');
+          
+          output = `**Desktop Packaging Results:**\n\n`;
+          results.forEach(result => {
+            output += `**${result.platform}:** ${result.success ? '✅ Success' : '❌ Failed'}\n`;
+            if (result.success) {
+              output += `- Output: ${result.outputPath}\n`;
+              output += `- Size: ${(result.size / 1024 / 1024).toFixed(2)} MB\n`;
+            } else if (result.errors && result.errors.length > 0) {
+              output += `- Errors: ${result.errors.join(', ')}\n`;
+            }
+            output += `\n`;
+          });
+          
+          logger.info('PakePackager', 'Desktop packaging complete', {
+            platforms: results.length,
+            successful: results.filter(r => r.success).length
+          });
         }
         // Check if code generation is needed
         else if (this.needsCodeGeneration(input, intent)) {
@@ -589,6 +762,63 @@ export class SynthSAI {
            lower.includes('fiction');
   }
 
+  private needsRealTimeInfo(input: string): boolean {
+    const lower = input.toLowerCase();
+    return lower.includes('news') || 
+           lower.includes('latest') ||
+           lower.includes('current') ||
+           lower.includes('today') ||
+           lower.includes('market') ||
+           lower.includes('stock') ||
+           lower.includes('breaking');
+  }
+
+  private needsGlobalIntelligence(input: string): boolean {
+    const lower = input.toLowerCase();
+    return lower.includes('flight') || 
+           lower.includes('track') ||
+           lower.includes('plane') ||
+           lower.includes('ship') ||
+           lower.includes('vessel') ||
+           lower.includes('maritime') ||
+           lower.includes('satellite') ||
+           lower.includes('earthquake') ||
+           lower.includes('osiris') ||
+           lower.includes('global intelligence');
+  }
+
+  private needsCodeVisualization(input: string): boolean {
+    const lower = input.toLowerCase();
+    return lower.includes('visualize') || 
+           lower.includes('codebase') ||
+           lower.includes('code map') ||
+           lower.includes('architecture') ||
+           lower.includes('dependencies') ||
+           lower.includes('floorplan') ||
+           lower.includes('code structure');
+  }
+
+  private needsBrowserAutomation(input: string): boolean {
+    const lower = input.toLowerCase();
+    return lower.includes('scrape') || 
+           lower.includes('browser') ||
+           lower.includes('lightpanda') ||
+           lower.includes('automate') ||
+           lower.includes('crawl') ||
+           lower.includes('fetch page') ||
+           (lower.includes('http') && (lower.includes('get') || lower.includes('read')));
+  }
+
+  private needsDesktopPackaging(input: string): boolean {
+    const lower = input.toLowerCase();
+    return lower.includes('package') || 
+           lower.includes('desktop') ||
+           lower.includes('pake') ||
+           lower.includes('native app') ||
+           lower.includes('standalone') ||
+           lower.includes('distribute');
+  }
+
   private generateEnhancedResponse(
     input: string,
     knowledgeAnswer: any,
@@ -705,6 +935,13 @@ export class SynthSAI {
       chainOfThoughtReasoner: this.chainOfThoughtReasoner.getStats(),
       performanceOptimizer: this.performanceOptimizer.getStats(),
       conversationalResponder: this.conversationalResponder.getStats(),
+      // New tool integrations
+      vaneSearch: this.vaneSearch.getStats(),
+      lightpandaBrowser: this.lightpandaBrowser.getStats(),
+      situationMonitor: this.situationMonitor.getStats(),
+      osirisAI: this.osirisAI.getStats(),
+      floorplan: this.floorplan.getStats(),
+      pakePackager: this.pakePackager.getStats(),
     };
   }
 
