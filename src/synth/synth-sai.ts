@@ -30,13 +30,15 @@ import { CreativeWritingEngine } from './creative-writing';
 import { ChainOfThoughtReasoner } from './chain-of-thought';
 import { PerformanceOptimizer } from './performance-optimizer';
 import { ConversationalResponder } from './conversational-responder';
-import { VaneSearch } from './vane-search';
-import { LightpandaBrowser } from './lightpanda-browser';
-import { SituationMonitor } from './situation-monitor';
-import { OsirisAI } from './osiris-ai';
-import { Floorplan } from './floorplan';
-import { PakePackager } from './pake-packager';
-import { SyntheticBrain, syntheticBrain } from './synthetic-brain';
+import { RealNewsAPI } from './real-news-api';
+import { RealFlightTracker } from './real-flight-tracker';
+import { RealMaritimeTracker } from './real-maritime-tracker';
+import { RealWeatherAPI, RealEarthquakeAPI } from './real-weather-earthquake';
+import { RealBrowserAutomation } from './real-browser-automation';
+import { RealVision } from './real-vision';
+import { RealVoice } from './real-voice';
+import { RealFileSystem } from './real-filesystem';
+import { MassivelyScaledBrain, massivelyScaledBrain } from './massively-scaled-brain';
 import { logger } from './logger';
 
 export interface SynthConfig {
@@ -90,16 +92,19 @@ export class SynthSAI {
   private performanceOptimizer: PerformanceOptimizer;
   private conversationalResponder: ConversationalResponder;
   
-  // New tool integrations
-  private vaneSearch: VaneSearch;
-  private lightpandaBrowser: LightpandaBrowser;
-  private situationMonitor: SituationMonitor;
-  private osirisAI: OsirisAI;
-  private floorplan: Floorplan;
-  private pakePackager: PakePackager;
+  // Real tool integrations
+  private newsAPI: RealNewsAPI;
+  private flightTracker: RealFlightTracker;
+  private maritimeTracker: RealMaritimeTracker;
+  private weatherAPI: RealWeatherAPI;
+  private earthquakeAPI: RealEarthquakeAPI;
+  private browserAutomation: RealBrowserAutomation;
+  private vision: RealVision;
+  private voice: RealVoice;
+  private fileSystem: RealFileSystem;
   
-  // Synthetic AI Brain
-  private brain: SyntheticBrain;
+  // Massively Scaled Synthetic Brain
+  private brain: MassivelyScaledBrain;
 
   private config: SynthConfig;
 
@@ -150,24 +155,21 @@ export class SynthSAI {
     this.performanceOptimizer = new PerformanceOptimizer();
     this.conversationalResponder = new ConversationalResponder();
     
-    // New tool integrations
-    this.vaneSearch = new VaneSearch();
-    this.lightpandaBrowser = new LightpandaBrowser();
-    this.situationMonitor = new SituationMonitor();
-    this.osirisAI = new OsirisAI();
-    this.floorplan = new Floorplan();
-    this.pakePackager = new PakePackager({
-      url: 'http://localhost:5173',
-      name: 'SynthSAI',
-      width: 1400,
-      height: 900
-    });
+    // Real tool integrations
+    this.newsAPI = new RealNewsAPI();
+    this.flightTracker = new RealFlightTracker();
+    this.maritimeTracker = new RealMaritimeTracker();
+    this.weatherAPI = new RealWeatherAPI();
+    this.earthquakeAPI = new RealEarthquakeAPI();
+    this.browserAutomation = new RealBrowserAutomation();
+    this.vision = new RealVision();
+    this.voice = new RealVoice();
+    this.fileSystem = new RealFileSystem();
     
-    // Initialize Synthetic Brain
-    this.brain = syntheticBrain;
-    this.brain.initialize();
+    // Initialize Massively Scaled Brain
+    this.brain = massivelyScaledBrain;
 
-    console.log('[SynthSAI] All 33 modules + Synthetic Brain initialized');
+    console.log('[SynthSAI] All 33 modules + Massively Scaled Brain initialized');
     console.log('[SynthSAI] Configuration:', this.config);
   }
 
