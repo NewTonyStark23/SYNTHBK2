@@ -245,6 +245,90 @@ export class MassivelyScaledBrain {
     return total;
   }
 
+  // Process text input through the brain (text → embedding → forward → response)
+  async process(input: { text: string; context: string[]; info: { intent: string; emotion: string; turnNumber: number } }): Promise<{
+    confidence: number;
+    reasoning: string[];
+    response: string;
+    embedding: number[];
+  }> {
+    // Convert text to a numeric embedding (simple hash-based)
+    const embedding = this.textToEmbedding(input.text);
+    
+    // Forward pass through the network
+    const output = this.forward(embedding);
+    
+    // Calculate confidence from output magnitude
+    const magnitude = Math.sqrt(output.reduce((sum, v) => sum + v * v, 0));
+    const confidence = Math.min(1, magnitude / 10);
+    
+    // Generate reasoning steps
+    const reasoning: string[] = [];
+    reasoning.push(`Analyzed input: "${input.text.substring(0, 50)}..."`);
+    reasoning.push(`Intent detected: ${input.info.intent}`);
+    reasoning.push(`Emotion context: ${input.info.emotion}`);
+    reasoning.push(`Network confidence: ${(confidence * 100).toFixed(1)}%`);
+    
+    // Generate response based on network output and context
+    const response = this.generateResponse(input, output, confidence);
+    
+    // Learn from this interaction (add to training data)
+    const targetEmbedding = this.textToEmbedding(response);
+    this.addTrainingData(embedding, targetEmbedding);
+    
+    return { confidence, reasoning, response, embedding: output };
+  }
+
+  // Convert text to numeric embedding vector
+  private textToEmbedding(text: string): number[] {
+    const embedding = new Array(this.config.inputSize).fill(0);
+    const words = text.toLowerCase().split(/\s+/);
+    
+    for (let i = 0; i < words.length; i++) {
+      const word = words[i];
+      // Hash each word to distribute across embedding dimensions
+      let hash = 0;
+      for (let j = 0; j < word.length; j++) {
+        hash = ((hash << 5) - hash + word.charCodeAt(j)) | 0;
+      }
+      // Set embedding values based on hash
+      const idx = Math.abs(hash) % this.config.inputSize;
+      embedding[idx] += (1 / Math.sqrt(words.length));
+      // Spread to neighboring dimensions for context
+      if (idx + 1 < this.config.inputSize) embedding[idx + 1] += 0.5 / Math.sqrt(words.length);
+      if (idx - 1 >= 0) embedding[idx - 1] += 0.5 / Math.sqrt(words.length);
+    }
+    
+    // Normalize
+    const norm = Math.sqrt(embedding.reduce((sum, v) => sum + v * v, 0));
+    if (norm > 0) {
+      for (let i = 0; i < embedding.length; i++) {
+        embedding[i] /= norm;
+      }
+    }
+    
+    return embedding;
+  }
+
+  // Generate response from network output
+  private generateResponse(
+    input: { text: string; context: string[]; info: { intent: string; emotion: string; turnNumber: number } },
+    output: number[],
+    confidence: number
+  ): string {
+    // Use network output to modulate response generation
+    const intent = input.info.intent;
+    const emotion = input.info.emotion;
+    
+    if (confidence > 0.7) {
+      return `Processed with high confidence (${(confidence * 100).toFixed(0)}%). Intent: ${intent}.`;
+    } else if (confidence > 0.4) {
+      return `Processed with moderate confidence (${(confidence * 100).toFixed(0)}%). Analyzing: "${input.text.substring(0, 30)}..."`;
+    } else {
+      return `Low confidence processing (${(confidence * 100).toFixed(0)}%). Need more context for: "${input.text.substring(0, 30)}..."`;
+    }
+  }
+
   // Get stats
   getStats(): any {
     return {

@@ -1,346 +1,138 @@
-// Real Browser Automation - Puppeteer Core (Headless Chrome)
-import puppeteer from 'puppeteer-core';
-
+// Browser Automation - Browser-compatible implementation
+// Uses fetch API for web scraping (no Node.js dependencies)
 export class RealBrowserAutomation {
-  private browser: any = null;
-  private executablePath: string;
+  private isConnected: boolean = false;
 
-  constructor(executablePath?: string) {
-    // Auto-detect Chrome/Chromium path
-    this.executablePath = executablePath || this.findChromePath();
-    console.log('[RealBrowserAutomation] Initialized with Puppeteer Core');
+  constructor() {
+    console.log('[RealBrowserAutomation] Initialized with browser-compatible fetch API');
   }
 
-  // Find Chrome/Chromium executable
-  private findChromePath(): string {
-    const paths = [
-      '/usr/bin/google-chrome',
-      '/usr/bin/chromium',
-      '/usr/bin/chromium-browser',
-      '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-      'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe'
-    ];
-
-    // Return first path (actual detection would require fs.existsSync)
-    return paths[0];
-  }
-
-  // Launch browser
-  async launch(): Promise<void> {
-    if (this.browser) return;
-
+  // Fetch and parse a web page using fetch API
+  async navigate(url: string): Promise<{
+    title: string;
+    content: string;
+    url: string;
+  }> {
     try {
-      this.browser = await puppeteer.launch({
-        executablePath: this.executablePath,
-        headless: true,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu'
-        ]
-      });
-      console.log('[RealBrowserAutomation] Browser launched');
-    } catch (error) {
-      console.error('[RealBrowserAutomation] Launch failed:', error);
-      throw error;
-    }
-  }
-
-  // Close browser
-  async close(): Promise<void> {
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
-      console.log('[RealBrowserAutomation] Browser closed');
-    }
-  }
-
-  // Navigate to URL
-  async navigate(url: string): Promise<any> {
-    if (!this.browser) await this.launch();
-
-    const page = await this.browser.newPage();
-    
-    try {
-      await page.goto(url, {
-        waitUntil: 'networkidle2',
-        timeout: 30000
+      // Use a CORS proxy or direct fetch
+      const response = await fetch(url, {
+        mode: 'cors',
+        headers: { 'Accept': 'text/html,application/json' }
       });
 
-      const title = await page.title();
-      const content = await page.content();
-      const url_final = page.url();
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
 
-      return {
-        title,
-        content,
-        url: url_final,
-        page
-      };
+      const contentType = response.headers.get('content-type') || '';
+      let content = '';
+      let title = '';
+
+      if (contentType.includes('html')) {
+        const html = await response.text();
+        // Extract title
+        const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+        title = titleMatch ? titleMatch[1].trim() : 'Untitled';
+        // Extract text content (strip tags)
+        content = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                     .replace(/<[^>]+>/g, ' ')
+                     .replace(/\s+/g, ' ')
+                     .trim()
+                     .substring(0, 5000);
+      } else if (contentType.includes('json')) {
+        const json = await response.json();
+        content = JSON.stringify(json, null, 2).substring(0, 5000);
+        title = 'JSON Response';
+      } else {
+        content = await response.text();
+        content = content.substring(0, 5000);
+        title = url;
+      }
+
+      this.isConnected = true;
+      return { title, content, url };
     } catch (error) {
-      await page.close();
-      throw error;
-    }
-  }
-
-  // Extract text content
-  async extractText(url: string): Promise<string> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const text = await page.evaluate(() => {
-        // Remove script and style elements
-        const scripts = document.querySelectorAll('script, style, nav, footer, header');
-        scripts.forEach(el => el.remove());
+      // Try via CORS proxy
+      try {
+        const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`;
+        const response = await fetch(proxyUrl);
         
-        return document.body.innerText;
-      });
-
-      await page.close();
-      return text;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
-  }
-
-  // Extract links
-  async extractLinks(url: string): Promise<any[]> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const links = await page.evaluate(() => {
-        const anchors = Array.from(document.querySelectorAll('a'));
-        return anchors.map(anchor => ({
-          text: anchor.innerText,
-          href: anchor.href,
-          title: anchor.title
-        })).filter(link => link.href && link.text);
-      });
-
-      await page.close();
-      return links;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
-  }
-
-  // Extract images
-  async extractImages(url: string): Promise<any[]> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const images = await page.evaluate(() => {
-        const imgs = Array.from(document.querySelectorAll('img'));
-        return imgs.map(img => ({
-          src: img.src,
-          alt: img.alt,
-          title: img.title,
-          width: img.naturalWidth,
-          height: img.naturalHeight
-        })).filter(img => img.src);
-      });
-
-      await page.close();
-      return images;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
-  }
-
-  // Take screenshot
-  async screenshot(url: string, outputPath?: string): Promise<Buffer> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const screenshot = await page.screenshot({
-        fullPage: true,
-        type: 'png'
-      });
-
-      await page.close();
-      return screenshot;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
-  }
-
-  // Generate PDF
-  async generatePDF(url: string): Promise<Buffer> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const pdf = await page.pdf({
-        format: 'A4',
-        printBackground: true,
-        margin: {
-          top: '1cm',
-          right: '1cm',
-          bottom: '1cm',
-          left: '1cm'
+        if (response.ok) {
+          const html = await response.text();
+          const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+          const title = titleMatch ? titleMatch[1].trim() : 'Untitled';
+          const content = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+                             .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+                             .replace(/<[^>]+>/g, ' ')
+                             .replace(/\s+/g, ' ')
+                             .trim()
+                             .substring(0, 5000);
+          
+          this.isConnected = true;
+          return { title, content, url };
         }
-      });
+      } catch (proxyError) {
+        // Fall through
+      }
 
-      await page.close();
-      return pdf;
-    } catch (error) {
-      await page.close();
+      this.isConnected = false;
       throw error;
     }
   }
 
-  // Execute JavaScript on page
-  async executeScript(url: string, script: string): Promise<any> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const result = await page.evaluate(script);
-      await page.close();
-      return result;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
+  // Extract text content from a URL
+  async extractText(url: string): Promise<string> {
+    const result = await this.navigate(url);
+    return result.content;
   }
 
-  // Fill form
-  async fillForm(url: string, formData: Record<string, string>): Promise<boolean> {
-    const { page } = await this.navigate(url);
-    
+  // Extract links from a URL
+  async extractLinks(url: string): Promise<string[]> {
     try {
-      for (const [selector, value] of Object.entries(formData)) {
-        await page.type(selector, value);
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      
+      const html = await response.text();
+      const linkRegex = /href=["']([^"']+)["']/gi;
+      const links: string[] = [];
+      let match;
+      
+      while ((match = linkRegex.exec(html)) !== null) {
+        const href = match[1];
+        if (href.startsWith('http') || href.startsWith('/')) {
+          links.push(href);
+        }
       }
       
-      await page.close();
-      return true;
+      return [...new Set(links)].slice(0, 50);
     } catch (error) {
-      await page.close();
-      return false;
+      console.error('[RealBrowserAutomation] Link extraction failed:', error);
+      return [];
     }
   }
 
-  // Click element
-  async clickElement(url: string, selector: string): Promise<boolean> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      await page.click(selector);
-      await page.waitForNavigation({ waitUntil: 'networkidle2' });
-      await page.close();
-      return true;
-    } catch (error) {
-      await page.close();
-      return false;
-    }
+  // Take a screenshot (using canvas - limited browser capability)
+  async screenshot(url: string): Promise<string | null> {
+    console.warn('[RealBrowserAutomation] Screenshots not available in browser context');
+    return null;
   }
 
-  // Wait for element
-  async waitForElement(url: string, selector: string, timeout: number = 5000): Promise<boolean> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      await page.waitForSelector(selector, { timeout });
-      await page.close();
-      return true;
-    } catch (error) {
-      await page.close();
-      return false;
-    }
+  // Execute JavaScript on a page (limited to fetch-based operations)
+  async evaluate(url: string, script: string): Promise<any> {
+    console.warn('[RealBrowserAutomation] Page evaluation not available in browser context');
+    return null;
   }
 
-  // Scrape with custom selector
-  async scrapeWithSelector(url: string, selector: string): Promise<any[]> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const elements = await page.evaluate((sel: string) => {
-        const items = Array.from(document.querySelectorAll(sel));
-        return items.map(item => ({
-          text: item.textContent?.trim() || '',
-          html: item.innerHTML,
-          attributes: Array.from(item.attributes).reduce((acc, attr) => {
-            acc[attr.name] = attr.value;
-            return acc;
-          }, {} as Record<string, string>)
-        }));
-      }, selector);
-
-      await page.close();
-      return elements;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
-  }
-
-  // Get page metadata
-  async getMetadata(url: string): Promise<any> {
-    const { page } = await this.navigate(url);
-    
-    try {
-      const metadata = await page.evaluate(() => {
-        const meta: Record<string, string> = {};
-        
-        // Get meta tags
-        document.querySelectorAll('meta').forEach(tag => {
-          const name = tag.getAttribute('name') || tag.getAttribute('property');
-          const content = tag.getAttribute('content');
-          if (name && content) {
-            meta[name] = content;
-          }
-        });
-
-        return {
-          title: document.title,
-          description: meta['description'] || meta['og:description'] || '',
-          keywords: meta['keywords'] || '',
-          author: meta['author'] || '',
-          ogTitle: meta['og:title'] || '',
-          ogDescription: meta['og:description'] || '',
-          ogImage: meta['og:image'] || '',
-          ogUrl: meta['og:url'] || '',
-          twitterCard: meta['twitter:card'] || '',
-          twitterTitle: meta['twitter:title'] || '',
-          twitterDescription: meta['twitter:description'] || '',
-          twitterImage: meta['twitter:image'] || ''
-        };
-      });
-
-      await page.close();
-      return metadata;
-    } catch (error) {
-      await page.close();
-      throw error;
-    }
+  async close(): Promise<void> {
+    this.isConnected = false;
   }
 
   getStats() {
     return {
-      browserLaunched: !!this.browser,
-      executablePath: this.executablePath,
-      capabilities: [
-        'navigate',
-        'extractText',
-        'extractLinks',
-        'extractImages',
-        'screenshot',
-        'generatePDF',
-        'executeScript',
-        'fillForm',
-        'clickElement',
-        'waitForElement',
-        'scrapeWithSelector',
-        'getMetadata'
-      ]
+      connected: this.isConnected,
+      capabilities: ['fetch', 'parse-html', 'extract-links', 'extract-text'],
+      limitations: ['no-screenshots', 'no-js-evaluation', 'cors-dependent']
     };
   }
 }

@@ -1,305 +1,127 @@
-// Real File System Access - Browser File API + Node.js fs
+// Real File System Access - Browser File System Access API + Virtual FS
+// Works in browser using File System Access API (Chrome/Edge) or falls back to virtual FS
 export class RealFileSystem {
-  private isNodeEnvironment: boolean;
-  private fs: any = null;
-  private path: any = null;
+  private virtualFS: Map<string, string> = new Map();
+  private fileHandles: Map<string, FileSystemFileHandle> = new Map();
+  private dirHandles: Map<string, FileSystemDirectoryHandle> = new Map();
+  private hasFSAccess: boolean;
 
   constructor() {
-    this.isNodeEnvironment = typeof process !== 'undefined' && process.versions !== undefined && process.versions.node !== undefined;
+    this.hasFSAccess = 'showOpenFilePicker' in window;
+    console.log(`[RealFileSystem] Initialized - File System Access API: ${this.hasFSAccess ? 'available' : 'not available, using virtual FS'}`);
+  }
+
+  // Read file from virtual FS or stored handle
+  async readFile(filePath: string): Promise<string> {
+    // Check stored handles first
+    const handle = this.fileHandles.get(filePath);
+    if (handle) {
+      const file = await handle.getFile();
+      return file.text();
+    }
     
-    if (this.isNodeEnvironment) {
-      // Node.js environment
-      try {
-        this.fs = require('fs');
-        this.path = require('path');
-        console.log('[RealFileSystem] Initialized with Node.js fs module');
-      } catch (error) {
-        console.error('[RealFileSystem] Failed to load fs module:', error);
-      }
-    } else {
-      console.log('[RealFileSystem] Initialized with Browser File API');
-    }
+    // Check virtual FS
+    const content = this.virtualFS.get(filePath);
+    if (content !== undefined) return content;
+    
+    throw new Error(`File not found: ${filePath}. Use pickFile() to select a file.`);
   }
 
-  // Read file (Node.js or Browser)
-  async readFile(filePath: string, encoding: string = 'utf-8'): Promise<string> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.readFile(filePath, encoding, (err: any, data: string) => {
-          if (err) reject(err);
-          else resolve(data);
-        });
-      });
-    } else {
-      // Browser - would need File API with file input
-      throw new Error('Browser file reading requires user file selection');
+  // Write file to virtual FS or stored handle
+  async writeFile(filePath: string, content: string): Promise<void> {
+    const handle = this.fileHandles.get(filePath);
+    if (handle) {
+      const writable = await handle.createWritable();
+      await writable.write(content);
+      await writable.close();
+      return;
     }
+    
+    this.virtualFS.set(filePath, content);
   }
 
-  // Write file (Node.js)
-  async writeFile(filePath: string, content: string, encoding: string = 'utf-8'): Promise<void> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.writeFile(filePath, content, encoding, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } else {
-      throw new Error('Browser file writing requires File System Access API');
-    }
+  // Append to file
+  async appendFile(filePath: string, content: string): Promise<void> {
+    const existing = await this.readFile(filePath).catch(() => '');
+    await this.writeFile(filePath, existing + content);
   }
 
-  // Append to file (Node.js)
-  async appendFile(filePath: string, content: string, encoding: string = 'utf-8'): Promise<void> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.appendFile(filePath, content, encoding, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } else {
-      throw new Error('Browser file appending requires File System Access API');
-    }
-  }
-
-  // Delete file (Node.js)
+  // Delete file
   async deleteFile(filePath: string): Promise<void> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.unlink(filePath, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } else {
-      throw new Error('Browser file deletion requires File System Access API');
-    }
+    this.virtualFS.delete(filePath);
+    this.fileHandles.delete(filePath);
   }
 
-  // Check if file exists (Node.js)
+  // Check if file exists
   async fileExists(filePath: string): Promise<boolean> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve) => {
-        this.fs.access(filePath, this.fs.constants.F_OK, (err: any) => {
-          resolve(!err);
-        });
-      });
-    } else {
-      return false;
+    return this.virtualFS.has(filePath) || this.fileHandles.has(filePath);
+  }
+
+  // List files in virtual FS
+  async readDirectory(_dirPath: string): Promise<string[]> {
+    return Array.from(this.virtualFS.keys());
+  }
+
+  // Pick a real file from disk (File System Access API)
+  async pickFile(types?: Record<string, string[]>): Promise<{ name: string; content: string; handle: string }> {
+    if (!this.hasFSAccess) {
+      throw new Error('File System Access API not supported. Use Chrome or Edge.');
     }
-  }
 
-  // Read directory (Node.js)
-  async readDirectory(dirPath: string): Promise<string[]> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.readdir(dirPath, (err: any, files: string[]) => {
-          if (err) reject(err);
-          else resolve(files);
-        });
-      });
-    } else {
-      throw new Error('Browser directory reading requires File System Access API');
+    const options: any = {};
+    if (types) {
+      options.types = [{ description: 'Files', accept: types }];
     }
+
+    const [handle] = await (window as any).showOpenFilePicker(options);
+    const file = await handle.getFile();
+    const content = await file.text();
+    
+    this.fileHandles.set(file.name, handle);
+    
+    return { name: file.name, content, handle: file.name };
   }
 
-  // Create directory (Node.js)
-  async createDirectory(dirPath: string, recursive: boolean = true): Promise<void> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.mkdir(dirPath, { recursive }, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } else {
-      throw new Error('Browser directory creation requires File System Access API');
-    }
-  }
-
-  // Get file stats (Node.js)
-  async getFileStats(filePath: string): Promise<any> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.stat(filePath, (err: any, stats: any) => {
-          if (err) reject(err);
-          else resolve({
-            size: stats.size,
-            isFile: stats.isFile(),
-            isDirectory: stats.isDirectory(),
-            created: stats.birthtime,
-            modified: stats.mtime,
-            accessed: stats.atime
-          });
-        });
-      });
-    } else {
-      throw new Error('Browser file stats require File System Access API');
-    }
-  }
-
-  // Copy file (Node.js)
-  async copyFile(source: string, destination: string): Promise<void> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.copyFile(source, destination, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } else {
-      throw new Error('Browser file copying requires File System Access API');
-    }
-  }
-
-  // Move file (Node.js)
-  async moveFile(source: string, destination: string): Promise<void> {
-    if (this.isNodeEnvironment && this.fs) {
-      return new Promise((resolve, reject) => {
-        this.fs.rename(source, destination, (err: any) => {
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    } else {
-      throw new Error('Browser file moving requires File System Access API');
-    }
-  }
-
-  // Read JSON file
-  async readJSON<T>(filePath: string): Promise<T> {
-    const content = await this.readFile(filePath);
-    return JSON.parse(content);
-  }
-
-  // Write JSON file
-  async writeJSON(filePath: string, data: any, pretty: boolean = true): Promise<void> {
-    const content = pretty ? JSON.stringify(data, null, 2) : JSON.stringify(data);
-    await this.writeFile(filePath, content);
-  }
-
-  // Watch file for changes (Node.js)
-  watchFile(filePath: string, callback: (eventType: string, filename: string) => void): any {
-    if (this.isNodeEnvironment && this.fs) {
-      return this.fs.watch(filePath, callback);
-    } else {
-      throw new Error('Browser file watching requires File System Access API');
-    }
-  }
-
-  // Get file extension
-  getFileExtension(filePath: string): string {
-    if (this.isNodeEnvironment && this.path) {
-      return this.path.extname(filePath);
-    } else {
-      const parts = filePath.split('.');
-      return parts.length > 1 ? '.' + parts[parts.length - 1] : '';
-    }
-  }
-
-  // Get file name without extension
-  getFileName(filePath: string): string {
-    if (this.isNodeEnvironment && this.path) {
-      return this.path.basename(filePath, this.path.extname(filePath));
-    } else {
-      const parts = filePath.split('/');
-      const filename = parts[parts.length - 1];
-      const nameParts = filename.split('.');
-      return nameParts.length > 1 ? nameParts.slice(0, -1).join('.') : filename;
-    }
-  }
-
-  // Get directory name
-  getDirectoryPath(filePath: string): string {
-    if (this.isNodeEnvironment && this.path) {
-      return this.path.dirname(filePath);
-    } else {
-      const parts = filePath.split('/');
-      return parts.slice(0, -1).join('/');
-    }
-  }
-
-  // Join paths
-  joinPaths(...paths: string[]): string {
-    if (this.isNodeEnvironment && this.path) {
-      return this.path.join(...paths);
-    } else {
-      return paths.join('/');
-    }
-  }
-
-  // Resolve absolute path
-  resolvePath(...paths: string[]): string {
-    if (this.isNodeEnvironment && this.path) {
-      return this.path.resolve(...paths);
-    } else {
-      return paths.join('/');
-    }
-  }
-
-  // Browser file download
-  downloadFile(content: string, filename: string, mimeType: string = 'text/plain'): void {
-    if (typeof window !== 'undefined') {
-      const blob = new Blob([content], { type: mimeType });
+  // Save file to disk
+  async saveFile(content: string, suggestedName: string = 'output.txt'): Promise<string> {
+    if (!this.hasFSAccess) {
+      // Fallback: download as blob
+      const blob = new Blob([content], { type: 'text/plain' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
+      a.download = suggestedName;
       a.click();
-      document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    } else {
-      throw new Error('Download only available in browser environment');
+      return `Downloaded as ${suggestedName}`;
     }
+
+    const handle = await (window as any).showSaveFilePicker({ suggestedName });
+    const writable = await handle.createWritable();
+    await writable.write(content);
+    await writable.close();
+    
+    this.fileHandles.set(handle.name, handle);
+    return `Saved to ${handle.name}`;
   }
 
-  // Browser file upload (requires file input element)
-  async uploadFile(fileInput: HTMLInputElement): Promise<{ name: string; content: string; size: number } | null> {
-    if (typeof window !== 'undefined' && fileInput.files && fileInput.files.length > 0) {
-      const file = fileInput.files[0];
-      const content = await file.text();
-      
-      return {
-        name: file.name,
-        content,
-        size: file.size
-      };
+  // Pick directory
+  async pickDirectory(): Promise<string> {
+    if (!this.hasFSAccess) {
+      throw new Error('File System Access API not supported.');
     }
-    
-    return null;
+
+    const handle = await (window as any).showDirectoryPicker();
+    this.dirHandles.set(handle.name, handle);
+    return handle.name;
   }
 
   getStats() {
     return {
-      isNodeEnvironment: this.isNodeEnvironment,
-      hasFs: !!this.fs,
-      hasPath: !!this.path,
-      capabilities: this.isNodeEnvironment ? [
-        'readFile',
-        'writeFile',
-        'appendFile',
-        'deleteFile',
-        'fileExists',
-        'readDirectory',
-        'createDirectory',
-        'getFileStats',
-        'copyFile',
-        'moveFile',
-        'readJSON',
-        'writeJSON',
-        'watchFile',
-        'getFileExtension',
-        'getFileName',
-        'getDirectoryPath',
-        'joinPaths',
-        'resolvePath'
-      ] : [
-        'downloadFile',
-        'uploadFile'
-      ]
+      virtualFiles: this.virtualFS.size,
+      fileHandles: this.fileHandles.size,
+      dirHandles: this.dirHandles.size,
+      hasFSAccess: this.hasFSAccess
     };
   }
 }

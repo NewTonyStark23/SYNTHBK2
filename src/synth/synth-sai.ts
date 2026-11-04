@@ -39,6 +39,12 @@ import { RealVision } from './real-vision';
 import { RealVoice } from './real-voice';
 import { RealFileSystem } from './real-filesystem';
 import { MassivelyScaledBrain, massivelyScaledBrain } from './massively-scaled-brain';
+import { SituationMonitor } from './situation-monitor';
+import { OsirisAI } from './osiris-ai';
+import { VaneSearch } from './vane-search';
+import { LightpandaBrowser } from './lightpanda-browser';
+import { Floorplan } from './floorplan';
+import { PakePackager } from './pake-packager';
 import { logger } from './logger';
 
 export interface SynthConfig {
@@ -105,6 +111,14 @@ export class SynthSAI {
   
   // Massively Scaled Synthetic Brain
   private brain: MassivelyScaledBrain;
+  
+  // Integration modules
+  private situationMonitor: SituationMonitor;
+  private osirisAI: OsirisAI;
+  private vaneSearch: VaneSearch;
+  private lightpandaBrowser: LightpandaBrowser;
+  private floorplan: Floorplan;
+  private pakePackager: PakePackager;
 
   private config: SynthConfig;
 
@@ -168,8 +182,16 @@ export class SynthSAI {
     
     // Initialize Massively Scaled Brain
     this.brain = massivelyScaledBrain;
+    
+    // Initialize integration modules
+    this.situationMonitor = new SituationMonitor();
+    this.osirisAI = new OsirisAI();
+    this.vaneSearch = new VaneSearch();
+    this.lightpandaBrowser = new LightpandaBrowser();
+    this.floorplan = new Floorplan();
+    this.pakePackager = new PakePackager({ url: 'http://localhost:5173', name: 'SynthSAI' });
 
-    console.log('[SynthSAI] All 33 modules + Massively Scaled Brain initialized');
+    console.log('[SynthSAI] All 33 modules + Massively Scaled Brain + 6 integration modules initialized');
     console.log('[SynthSAI] Configuration:', this.config);
   }
 
@@ -277,7 +299,7 @@ export class SynthSAI {
                   knowledgeAnswer = {
                     answer: vaneResult.answer,
                     confidence: vaneResult.confidence,
-                    sources: vaneResult.sources.slice(0, 3).map(s => ({
+                    sources: vaneResult.sources.slice(0, 3).map((s: any) => ({
                       title: s.title,
                       url: s.url
                     }))
@@ -371,8 +393,8 @@ export class SynthSAI {
           modulesUsed.push('SituationMonitor');
           
           output = `**Real-Time Global Context:**\n\n`;
-          output += `**Latest News:** ${context.news.slice(0, 3).map(n => n.title).join(', ')}\n\n`;
-          output += `**Markets:** ${context.markets.map(m => `${m.symbol}: $${m.price.toFixed(2)} (${m.changePercent > 0 ? '+' : ''}${m.changePercent.toFixed(2)}%)`).join(', ')}\n\n`;
+          output += `**Latest News:** ${context.news.slice(0, 3).map((n: any) => n.title).join(', ')}\n\n`;
+          output += `**Markets:** ${context.markets.map((m: any) => `${m.symbol}: $${m.price.toFixed(2)} (${m.changePercent > 0 ? '+' : ''}${m.changePercent.toFixed(2)}%)`).join(', ')}\n\n`;
           output += `**Geopolitical Events:** ${context.events.length} active events\n`;
           
           logger.info('SituationMonitor', 'Real-time context fetched', {
@@ -430,7 +452,7 @@ export class SynthSAI {
           
           if (health.issues.length > 0) {
             output += `\n**Issues Found:**\n`;
-            health.issues.forEach((issue, i) => {
+            health.issues.forEach((issue: any, i: number) => {
               output += `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.description}\n`;
             });
           }
@@ -477,7 +499,7 @@ export class SynthSAI {
           modulesUsed.push('PakePackager');
           
           output = `**Desktop Packaging Results:**\n\n`;
-          results.forEach(result => {
+          results.forEach((result: any) => {
             output += `**${result.platform}:** ${result.success ? '✅ Success' : '❌ Failed'}\n`;
             if (result.success) {
               output += `- Output: ${result.outputPath}\n`;
@@ -490,7 +512,7 @@ export class SynthSAI {
           
           logger.info('PakePackager', 'Desktop packaging complete', {
             platforms: results.length,
-            successful: results.filter(r => r.success).length
+            successful: results.filter((r: any) => r.success).length
           });
         }
         // Check if code generation is needed

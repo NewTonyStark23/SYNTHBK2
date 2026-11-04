@@ -138,7 +138,7 @@ function App() {
       <header className="header">
         <div className="header-content">
           <h1>🧠 Synth SAI</h1>
-          <p>Synthetic Artificial Intelligence | 16 Modules | Fable 5 Ready</p>
+          <p>Synthetic Artificial Intelligence | 39 Modules | All Wired to Real APIs</p>
         </div>
         <div className="header-actions">
           <button onClick={() => setShowLogs(!showLogs)} className="btn-secondary">
@@ -166,17 +166,23 @@ function App() {
                     <h2>Welcome to Synth SAI</h2>
                     <p>Start a conversation to see the 16 modules in action.</p>
                     <div className="example-prompts">
-                      <button onClick={() => setInput('Build a red website')}>
-                        Build a red website
+                      <button onClick={() => setInput('What is the latest news today?')}>
+                        📰 Latest news
                       </button>
-                      <button onClick={() => setInput('Actually make it blue')}>
-                        Actually make it blue
+                      <button onClick={() => setInput('Track flights over the US')}>
+                        ✈️ Track flights
                       </button>
-                      <button onClick={() => setInput('How do neural networks work?')}>
-                        How do neural networks work?
+                      <button onClick={() => setInput('What earthquakes happened recently?')}>
+                        🌍 Recent earthquakes
                       </button>
-                      <button onClick={() => setInput('Compare Python vs JavaScript')}>
-                        Compare Python vs JavaScript
+                      <button onClick={() => setInput('What is quantum computing?')}>
+                        🧠 Knowledge query
+                      </button>
+                      <button onClick={() => setInput('Build a calculator website')}>
+                        💻 Generate code
+                      </button>
+                      <button onClick={() => setInput('Hello, how are you?')}>
+                        👋 Say hello
                       </button>
                     </div>
                   </div>

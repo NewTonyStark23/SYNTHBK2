@@ -1,10 +1,5 @@
-// ============================================
-// TOOL EXECUTOR (Uncut Pattern)
-// Solves: Real Tool Use gap (45% → 90%)
-// Actually executes tools, not just simulates
-// Inspired by Uncut's 4-tool harness
-// ============================================
-
+// TOOL EXECUTOR - REAL implementation using browser APIs
+// Uses File System Access API, Web Workers, and real execution
 export interface Tool {
   name: string;
   description: string;
@@ -36,34 +31,51 @@ export interface ToolCall {
 export class ToolExecutor {
   private tools: Map<string, Tool> = new Map();
   private executionHistory: ToolCall[] = [];
+  private fileHandles: Map<string, FileSystemFileHandle> = new Map();
+  private dirHandles: Map<string, FileSystemDirectoryHandle> = new Map();
 
   constructor() {
-    console.log('[ToolExecutor] Uncut pattern initialized with 4 core tools');
+    console.log('[ToolExecutor] Initialized with real browser APIs');
     this.initializeCoreTools();
   }
 
-  // ============================================
-  // CORE TOOLS (Uncut Pattern)
-  // ============================================
-
   private initializeCoreTools(): void {
-    // Tool 1: read_file
+    // Tool 1: read_file - Uses File System Access API or file input
     this.registerTool({
       name: 'read_file',
-      description: 'Read the contents of a file',
+      description: 'Read the contents of a file (uses File System Access API)',
       parameters: [
-        { name: 'path', type: 'string', required: true, description: 'File path to read' },
+        { name: 'path', type: 'string', required: true, description: 'File path or handle key' },
       ],
       execute: async (params) => {
         const startTime = Date.now();
         try {
-          // In browser environment, we can't actually read files
-          // This would be implemented with Node.js or browser File API
-          const mockContent = `// Contents of ${params.path}\nconsole.log('File content');`;
+          // Check if we have a stored handle
+          const handle = this.fileHandles.get(params.path);
+          if (handle) {
+            const file = await handle.getFile();
+            const content = await file.text();
+            return {
+              success: true,
+              output: content,
+              executionTime: Date.now() - startTime,
+            };
+          }
           
+          // Otherwise, use the virtual filesystem (in-memory)
+          const vfsContent = this.virtualFS.get(params.path);
+          if (vfsContent !== undefined) {
+            return {
+              success: true,
+              output: vfsContent,
+              executionTime: Date.now() - startTime,
+            };
+          }
+
           return {
-            success: true,
-            output: mockContent,
+            success: false,
+            output: null,
+            error: `File not found: ${params.path}. Use pick_file to select a file first.`,
             executionTime: Date.now() - startTime,
           };
         } catch (error) {
@@ -77,22 +89,35 @@ export class ToolExecutor {
       },
     });
 
-    // Tool 2: write_file
+    // Tool 2: write_file - Uses File System Access API or virtual FS
     this.registerTool({
       name: 'write_file',
-      description: 'Write content to a file',
+      description: 'Write content to a file (uses File System Access API or virtual FS)',
       parameters: [
-        { name: 'path', type: 'string', required: true, description: 'File path to write' },
+        { name: 'path', type: 'string', required: true, description: 'File path or handle key' },
         { name: 'content', type: 'string', required: true, description: 'Content to write' },
       ],
       execute: async (params) => {
         const startTime = Date.now();
         try {
-          // In browser environment, this would use File System Access API
-          // For now, simulate success
+          // Check if we have a stored writable handle
+          const handle = this.fileHandles.get(params.path);
+          if (handle) {
+            const writable = await handle.createWritable();
+            await writable.write(params.content);
+            await writable.close();
+            return {
+              success: true,
+              output: `Wrote ${params.content.length} bytes to ${params.path}`,
+              executionTime: Date.now() - startTime,
+            };
+          }
+          
+          // Fall back to virtual filesystem
+          this.virtualFS.set(params.path, params.content);
           return {
             success: true,
-            output: `Successfully wrote ${params.content.length} bytes to ${params.path}`,
+            output: `Wrote ${params.content.length} bytes to virtual FS: ${params.path}`,
             executionTime: Date.now() - startTime,
           };
         } catch (error) {
@@ -106,7 +131,7 @@ export class ToolExecutor {
       },
     });
 
-    // Tool 3: replace
+    // Tool 3: replace - Real text replacement in virtual FS or file handles
     this.registerTool({
       name: 'replace',
       description: 'Replace text in a file',
@@ -118,98 +143,43 @@ export class ToolExecutor {
       execute: async (params) => {
         const startTime = Date.now();
         try {
-          // Simulate replacement
-          return {
-            success: true,
-            output: `Replaced "${params.search}" with "${params.replace}" in ${params.path}`,
-            executionTime: Date.now() - startTime,
-          };
-        } catch (error) {
-          return {
-            success: false,
-            output: null,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            executionTime: Date.now() - startTime,
-          };
-        }
-      },
-    });
-
-    // Tool 4: run_command
-    this.registerTool({
-      name: 'run_command',
-      description: 'Execute a shell command',
-      parameters: [
-        { name: 'command', type: 'string', required: true, description: 'Command to execute' },
-        { name: 'cwd', type: 'string', required: false, description: 'Working directory' },
-      ],
-      execute: async (params) => {
-        const startTime = Date.now();
-        try {
-          // In browser environment, we can't execute shell commands
-          // This would be implemented with Node.js child_process
-          // For now, simulate common commands
+          // Read current content
+          const handle = this.fileHandles.get(params.path);
+          let content: string;
           
-          if (params.command.includes('ls') || params.command.includes('dir')) {
-            return {
-              success: true,
-              output: 'file1.txt\nfile2.js\nfile3.json\nnode_modules/',
-              executionTime: Date.now() - startTime,
-            };
-          } else if (params.command.includes('echo')) {
-            const text = params.command.replace('echo ', '').replace(/['"]/g, '');
-            return {
-              success: true,
-              output: text,
-              executionTime: Date.now() - startTime,
-            };
-          } else if (params.command.includes('node') || params.command.includes('npm')) {
-            return {
-              success: true,
-              output: `Executed: ${params.command}\n[Simulated output]`,
-              executionTime: Date.now() - startTime,
-            };
+          if (handle) {
+            const file = await handle.getFile();
+            content = await file.text();
           } else {
+            content = this.virtualFS.get(params.path) || '';
+          }
+          
+          if (!content) {
             return {
-              success: true,
-              output: `Command executed: ${params.command}`,
+              success: false,
+              output: null,
+              error: `File not found: ${params.path}`,
               executionTime: Date.now() - startTime,
             };
           }
-        } catch (error) {
-          return {
-            success: false,
-            output: null,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            executionTime: Date.now() - startTime,
-          };
-        }
-      },
-    });
 
-    // Additional tools for Synth
+          // Perform real replacement
+          const escaped = params.search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const newContent = content.split(params.search).join(params.replace);
+          const replacements = (content.match(new RegExp(escaped, 'g')) || []).length;
+          
+          // Write back
+          if (handle) {
+            const writable = await handle.createWritable();
+            await writable.write(newContent);
+            await writable.close();
+          } else {
+            this.virtualFS.set(params.path, newContent);
+          }
 
-    // Tool 5: search_knowledge
-    this.registerTool({
-      name: 'search_knowledge',
-      description: 'Search the knowledge graph',
-      parameters: [
-        { name: 'query', type: 'string', required: true, description: 'Search query' },
-        { name: 'limit', type: 'number', required: false, description: 'Max results' },
-      ],
-      execute: async (params) => {
-        const startTime = Date.now();
-        try {
-          // This would integrate with KnowledgeGraph
           return {
             success: true,
-            output: {
-              results: [
-                { id: 'node_1', name: params.query, relevance: 0.95 },
-                { id: 'node_2', name: `Related to ${params.query}`, relevance: 0.75 },
-              ],
-              total: 2,
-            },
+            output: `Replaced ${replacements} occurrence(s) of "${params.search}" with "${params.replace}" in ${params.path}`,
             executionTime: Date.now() - startTime,
           };
         } catch (error) {
@@ -223,32 +193,19 @@ export class ToolExecutor {
       },
     });
 
-    // Tool 6: execute_code
+    // Tool 4: run_command - REAL JavaScript execution in sandboxed iframe
     this.registerTool({
-      name: 'execute_code',
-      description: 'Execute JavaScript code in a sandbox',
+      name: 'run_command',
+      description: 'Execute JavaScript code in a sandboxed environment',
       parameters: [
-        { name: 'code', type: 'string', required: true, description: 'JavaScript code to execute' },
-        { name: 'timeout', type: 'number', required: false, description: 'Timeout in ms' },
+        { name: 'command', type: 'string', required: true, description: 'JavaScript code to execute' },
+        { name: 'cwd', type: 'string', required: false, description: 'Context/virtual directory' },
       ],
       execute: async (params) => {
         const startTime = Date.now();
         try {
-          // In browser, we can use Function constructor for basic execution
-          // WARNING: This is for demo purposes only - real implementation needs proper sandboxing
-          const timeout = params.timeout || 5000;
-          
-          // Simple sandbox - no access to dangerous APIs
-          const sandbox = {
-            console: { log: (...args: any[]) => console.log('[Sandbox]', ...args) },
-            Math,
-            JSON,
-            Date,
-          };
-          
-          const fn = new Function('sandbox', `with(sandbox) { ${params.code} }`);
-          const result = fn(sandbox);
-          
+          // Execute in sandboxed iframe for safety
+          const result = await this.executeInSandbox(params.command);
           return {
             success: true,
             output: result,
@@ -258,152 +215,323 @@ export class ToolExecutor {
           return {
             success: false,
             output: null,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.message : 'Execution error',
             executionTime: Date.now() - startTime,
           };
         }
       },
     });
+
+    // Tool 5: pick_file - Opens real file picker (File System Access API)
+    this.registerTool({
+      name: 'pick_file',
+      description: 'Open file picker to select a real file from disk',
+      parameters: [
+        { name: 'types', type: 'object', required: false, description: 'File type filters' },
+      ],
+      execute: async (params) => {
+        const startTime = Date.now();
+        try {
+          if (!('showOpenFilePicker' in window)) {
+            return {
+              success: false,
+              output: null,
+              error: 'File System Access API not supported in this browser. Use Chrome/Edge.',
+              executionTime: Date.now() - startTime,
+            };
+          }
+
+          const options: any = {};
+          if (params.types) {
+            options.types = [{
+              description: 'Files',
+              accept: params.types
+            }];
+          }
+
+          const [fileHandle] = await (window as any).showOpenFilePicker(options);
+          const file = await fileHandle.getFile();
+          const content = await file.text();
+          
+          // Store the handle for future read/write operations
+          this.fileHandles.set(file.name, fileHandle);
+          
+          return {
+            success: true,
+            output: {
+              name: file.name,
+              size: file.size,
+              type: file.type,
+              lastModified: file.lastModified,
+              content: content.substring(0, 10000), // First 10KB
+              handleKey: file.name
+            },
+            executionTime: Date.now() - startTime,
+          };
+        } catch (error) {
+          if ((error as any).name === 'AbortError') {
+            return {
+              success: false,
+              output: null,
+              error: 'File selection cancelled',
+              executionTime: Date.now() - startTime,
+            };
+          }
+          return {
+            success: false,
+            output: null,
+            error: error instanceof Error ? error.message : 'File picker error',
+            executionTime: Date.now() - startTime,
+          };
+        }
+      },
+    });
+
+    // Tool 6: save_file - Save to real disk via File System Access API
+    this.registerTool({
+      name: 'save_file',
+      description: 'Save content to a real file on disk (File System Access API)',
+      parameters: [
+        { name: 'content', type: 'string', required: true, description: 'Content to save' },
+        { name: 'suggestedName', type: 'string', required: false, description: 'Suggested filename' },
+      ],
+      execute: async (params) => {
+        const startTime = Date.now();
+        try {
+          if (!('showSaveFilePicker' in window)) {
+            // Fallback: download as blob
+            const blob = new Blob([params.content], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = params.suggestedName || 'output.txt';
+            a.click();
+            URL.revokeObjectURL(url);
+            
+            return {
+              success: true,
+              output: `Downloaded ${params.content.length} bytes as ${params.suggestedName || 'output.txt'}`,
+              executionTime: Date.now() - startTime,
+            };
+          }
+
+          const handle = await (window as any).showSaveFilePicker({
+            suggestedName: params.suggestedName || 'output.txt',
+          });
+          
+          const writable = await handle.createWritable();
+          await writable.write(params.content);
+          await writable.close();
+          
+          this.fileHandles.set(handle.name, handle);
+          
+          return {
+            success: true,
+            output: `Saved ${params.content.length} bytes to ${handle.name}`,
+            executionTime: Date.now() - startTime,
+          };
+        } catch (error) {
+          if ((error as any).name === 'AbortError') {
+            return {
+              success: false,
+              output: null,
+              error: 'Save cancelled',
+              executionTime: Date.now() - startTime,
+            };
+          }
+          return {
+            success: false,
+            output: null,
+            error: error instanceof Error ? error.message : 'Save error',
+            executionTime: Date.now() - startTime,
+          };
+        }
+      },
+    });
+
+    // Tool 7: search_knowledge - Uses real Wikipedia + DuckDuckGo
+    this.registerTool({
+      name: 'search_knowledge',
+      description: 'Search real knowledge sources (Wikipedia, DuckDuckGo)',
+      parameters: [
+        { name: 'query', type: 'string', required: true, description: 'Search query' },
+        { name: 'limit', type: 'number', required: false, description: 'Max results' },
+      ],
+      execute: async (params) => {
+        const startTime = Date.now();
+        try {
+          const results: any[] = [];
+          
+          // Real Wikipedia search
+          try {
+            const wikiResponse = await fetch(
+              `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(params.query)}&srlimit=${params.limit || 5}&format=json&origin=*`
+            );
+            if (wikiResponse.ok) {
+              const wikiData = await wikiResponse.json();
+              const wikiResults = (wikiData.query?.search || []).map((item: any) => ({
+                title: item.title,
+                snippet: item.snippet.replace(/<[^>]*>/g, ''),
+                url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
+                source: 'Wikipedia'
+              }));
+              results.push(...wikiResults);
+            }
+          } catch (e) { /* continue */ }
+
+          // Real DuckDuckGo search
+          try {
+            const ddgResponse = await fetch(
+              `https://api.duckduckgo.com/?q=${encodeURIComponent(params.query)}&format=json&no_html=1&skip_disambig=1`
+            );
+            if (ddgResponse.ok) {
+              const ddgData = await ddgResponse.json();
+              if (ddgData.Abstract) {
+                results.unshift({
+                  title: ddgData.Heading || params.query,
+                  snippet: ddgData.Abstract,
+                  url: ddgData.AbstractURL || '',
+                  source: 'DuckDuckGo'
+                });
+              }
+            }
+          } catch (e) { /* continue */ }
+
+          return {
+            success: true,
+            output: results,
+            executionTime: Date.now() - startTime,
+          };
+        } catch (error) {
+          return {
+            success: false,
+            output: null,
+            error: error instanceof Error ? error.message : 'Search error',
+            executionTime: Date.now() - startTime,
+          };
+        }
+      },
+    });
+
+    console.log(`[ToolExecutor] ${this.tools.size} tools registered (all real implementations)`);
   }
 
-  // ============================================
-  // TOOL MANAGEMENT
-  // ============================================
+  // Virtual filesystem (in-memory, persists during session)
+  private virtualFS: Map<string, string> = new Map();
+
+  // Execute JavaScript in sandboxed iframe
+  private async executeInSandbox(code: string, timeout: number = 5000): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const iframe = document.createElement('iframe');
+      iframe.style.display = 'none';
+      iframe.sandbox.add('allow-scripts');
+      
+      const id = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      
+      iframe.srcdoc = `
+        <!DOCTYPE html><html><body><script>
+          try {
+            const logs = [];
+            const origLog = console.log;
+            console.log = (...args) => logs.push(args.map(a => String(a)).join(' '));
+            
+            const result = (function() { ${code} })();
+            
+            parent.postMessage({
+              id: '${id}',
+              success: true,
+              result: result !== undefined ? String(result) : 'undefined',
+              logs: logs
+            }, '*');
+          } catch (e) {
+            parent.postMessage({
+              id: '${id}',
+              success: false,
+              error: e.message,
+              logs: []
+            }, '*');
+          }
+        </script></body></html>
+      `;
+
+      const timeoutId = setTimeout(() => {
+        cleanup();
+        reject(new Error('Execution timeout'));
+      }, timeout);
+
+      const handler = (event: MessageEvent) => {
+        if (event.data?.id === id) {
+          clearTimeout(timeoutId);
+          cleanup();
+          if (event.data.success) {
+            const output = event.data.logs.length > 0 
+              ? event.data.logs.join('\n') + '\n=> ' + event.data.result
+              : event.data.result;
+            resolve(output);
+          } else {
+            reject(new Error(event.data.error));
+          }
+        }
+      };
+
+      const cleanup = () => {
+        window.removeEventListener('message', handler);
+        iframe.remove();
+      };
+
+      window.addEventListener('message', handler);
+      document.body.appendChild(iframe);
+    });
+  }
 
   registerTool(tool: Tool): void {
     this.tools.set(tool.name, tool);
   }
 
-  getTool(name: string): Tool | undefined {
-    return this.tools.get(name);
-  }
-
-  listTools(): Tool[] {
-    return Array.from(this.tools.values());
-  }
-
-  // ============================================
-  // EXECUTION
-  // ============================================
-
-  async executeTool(toolName: string, parameters: Record<string, any>): Promise<ToolResult> {
-    const tool = this.tools.get(toolName);
-    
+  async executeTool(name: string, params: Record<string, any>): Promise<ToolResult> {
+    const tool = this.tools.get(name);
     if (!tool) {
       return {
         success: false,
         output: null,
-        error: `Tool "${toolName}" not found`,
+        error: `Tool "${name}" not found. Available: ${Array.from(this.tools.keys()).join(', ')}`,
         executionTime: 0,
       };
     }
 
-    // Validate parameters
-    for (const param of tool.parameters) {
-      if (param.required && !(param.name in parameters)) {
-        return {
-          success: false,
-          output: null,
-          error: `Missing required parameter: ${param.name}`,
-          executionTime: 0,
-        };
-      }
-    }
-
-    // Execute tool
-    const result = await tool.execute(parameters);
-
-    // Record in history
-    this.executionHistory.push({
-      toolName,
-      parameters,
-      result,
-      timestamp: Date.now(),
-    });
-
-    // Keep last 1000 executions
-    if (this.executionHistory.length > 1000) {
-      this.executionHistory.shift();
-    }
-
-    return result;
-  }
-
-  // ============================================
-  // MULTI-TOOL EXECUTION
-  // ============================================
-
-  async executeTools(calls: Array<{ toolName: string; parameters: Record<string, any> }>): Promise<ToolResult[]> {
-    const results: ToolResult[] = [];
-    
-    for (const call of calls) {
-      const result = await this.executeTool(call.toolName, call.parameters);
-      results.push(result);
+    const startTime = Date.now();
+    try {
+      const result = await tool.execute(params);
       
-      // Stop on first failure
-      if (!result.success) {
-        break;
-      }
+      this.executionHistory.push({
+        toolName: name,
+        parameters: params,
+        result,
+        timestamp: Date.now(),
+      });
+
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        output: null,
+        error: error instanceof Error ? error.message : 'Tool execution failed',
+        executionTime: Date.now() - startTime,
+      };
     }
-    
-    return results;
   }
 
-  // ============================================
-  // CODE FORGE INTEGRATION
-  // ============================================
-
-  async executeCodeForge(code: string): Promise<ToolResult> {
-    // Write code to temp file
-    const writeResult = await this.executeTool('write_file', {
-      path: '/tmp/synth_code.js',
-      content: code,
-    });
-
-    if (!writeResult.success) {
-      return writeResult;
-    }
-
-    // Execute the code
-    return await this.executeTool('execute_code', {
-      code,
-      timeout: 10000,
-    });
+  getAvailableTools(): Tool[] {
+    return Array.from(this.tools.values());
   }
-
-  // ============================================
-  // HISTORY
-  // ============================================
-
-  getExecutionHistory(limit: number = 10): ToolCall[] {
-    return this.executionHistory.slice(-limit);
-  }
-
-  getToolUsageStats(): Record<string, number> {
-    const stats: Record<string, number> = {};
-    
-    for (const call of this.executionHistory) {
-      stats[call.toolName] = (stats[call.toolName] || 0) + 1;
-    }
-    
-    return stats;
-  }
-
-  // ============================================
-  // STATS
-  // ============================================
 
   getStats() {
     return {
-      totalTools: this.tools.size,
-      toolNames: Array.from(this.tools.keys()),
-      totalExecutions: this.executionHistory.length,
-      successRate: this.executionHistory.length > 0
-        ? this.executionHistory.filter(c => c.result?.success).length / this.executionHistory.length
-        : 0,
-      averageExecutionTime: this.executionHistory.length > 0
-        ? this.executionHistory.reduce((sum, c) => sum + (c.result?.executionTime || 0), 0) / this.executionHistory.length
-        : 0,
+      toolsRegistered: this.tools.size,
+      toolsAvailable: Array.from(this.tools.keys()),
+      executionCount: this.executionHistory.length,
+      fileHandlesStored: this.fileHandles.size,
+      virtualFSFiles: this.virtualFS.size,
     };
   }
 }
